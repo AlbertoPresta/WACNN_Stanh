@@ -335,7 +335,11 @@ class BinaryCodec(Codec):
         dec_time = time.time() - start
 
         # Read image
-        rec = read_image(png_filepath)
+        if "kodak" in png_filepath:
+            halve = False
+        else:
+            halve = True
+        rec = read_image(png_filepath, halve = halve)
         os.close(fd0)
         os.remove(png_filepath)
         os.close(fd1)
