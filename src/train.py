@@ -64,12 +64,12 @@ class TestKodakDataset(Dataset):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
     parser.add_argument("-m","--model",default="cnn",choices=models.keys(),help="Model architecture (default: %(default)s)",)
-    parser.add_argument("-aux","--aux_net",default="cnn",choices=aux_net_models.keys(),help="Model architecture (default: %(default)s)")
+    parser.add_argument("-aux","--aux_net",default="none",choices=aux_net_models.keys(),help="Model architecture (default: %(default)s)")
     parser.add_argument("-d", "--dataset", type=str, default = "/scratch/dataset/openimages", help="Training dataset")
-    parser.add_argument("-e","--epochs",default=1200,type=int,help="Number of epochs (default: %(default)s)",)
+    parser.add_argument("-e","--epochs",default=300,type=int,help="Number of epochs (default: %(default)s)",)
     parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
     parser.add_argument("-n","--num-workers",type=int,default=8,help="Dataloaders threads (default: %(default)s)",)
-    parser.add_argument("--lmbda",type=float,default=0.0483,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--lmbda",type=float,default=0.0032,help="Bit-rate distortion parameter (default: %(default)s)",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)")
     parser.add_argument("--test-batch-size",type=int,default=64,help="Test batch size (default: %(default)s)",)
     parser.add_argument( "--aux-learning-rate", default=1e-3, type=float, help="Auxiliary loss learning rate (default: %(default)s)",)
@@ -80,6 +80,8 @@ def parse_args(argv):
     parser.add_argument("--seed", type=float,default = 42, help="Set random seed for reproducibility")
     parser.add_argument("--clip_max_norm",default=1.0,type=float,help="gradient clipping max norm (default: %(default)s",)
     parser.add_argument("--checkpoint", type=str, help="Path to a checkpoint")
+
+    parser.add_argument("-ni","--num_images",default = 8016, type = int)
 
 
     parser.add_argument("-dims","--dimension",default=192,type=int,help="Number of epochs (default: %(default)s)",) 
@@ -95,7 +97,7 @@ def parse_args(argv):
     parser.add_argument("--fact_gp",default=10,type=int,help="factorized_beta",)
     parser.add_argument("--fact_activation",default="nonlinearstanh",type=str,help="factorized_beta",)
     parser.add_argument("--fact_annealing",default="gap",type=str,help="factorized_annealing",)
-    parser.add_argument("--fact_tr",default=False,type=bool,help="factorized_tr",)
+    parser.add_argument("--fact_tr",default= True,type=bool,help="factorized_tr",)
 
 
 
@@ -105,7 +107,7 @@ def parse_args(argv):
     parser.add_argument("--gauss_gp",default=10,type=int,help="gauss_beta",)
     parser.add_argument("--gauss_activation",default="nonlinearstanh",type=str,help="factorized_beta",)
     parser.add_argument("--gauss_annealing",default="gap",type=str,help="factorized_annealing",)
-    parser.add_argument("--gauss_tr",default=False,type=bool,help="gauss_tr",)
+    parser.add_argument("--gauss_tr",default=True,type=bool,help="gauss_tr",)
 
     parser.add_argument("--baseline", default=False, type=bool, help="factorized_annealing",)
     parser.add_argument("--classic_compress", default= True, type=bool, help="compress_classical",)
@@ -116,6 +118,11 @@ def parse_args(argv):
     parser.add_argument("--pret_checkpoint_base",default =None) # "/scratch/pretrained_models/BlockAttention/base_cnn_0483.pth.tar"
 
     parser.add_argument("--pret_checkpoint_stf",default ="/scratch/pretrained_models/stf/stf_0483.pth.tar") # "/scratch/pretrained_models/stf/stf_013.pth.tar"
+    parser.add_argument("--path_adapter",default = "/scratch/inference/pretrained_models/devil2022/q4-zou22.pth.tar" ) #/scratch/inference/pretrained_models/devil2022/q8-temp-zou2022.pth.tar
+    parser.add_argument("--adapt",default = True, type = bool)
+    
+    # /devil2022 
+
 
 
     args = parser.parse_args(argv)
@@ -150,7 +157,7 @@ def rename_key(key):
 
 
 def load_pretrained(state_dict):
-    """Convert sccctate_dict keys."""
+    """Convert sccctaddte_dict keys."""
     state_dict = {rename_key(k): v for k, v in state_dict.items()}
     if None in state_dict:
         state_dict.pop(None)
@@ -179,7 +186,7 @@ def main(argv):
 
 
 
-    train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms)
+    train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images)
     #test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)
     test_dataset = TestKodakDataset(data_dir="/scratch/dataset/kodak")
     device = "cuda" if  torch.cuda.is_available() else "cpu"
@@ -227,16 +234,6 @@ def main(argv):
         #checkpoint = torch.load(args.pret_checkpoint, map_location=device)
         state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
         aux_net = from_state_dict(aux_net_models["cnn"], state_dict)
-        """
-        del checkpoint["state_dict"]["entropy_bottleneck._offset"]
-        del checkpoint["state_dict"]["entropy_bottleneck._quantized_cdf"]
-        del checkpoint["state_dict"]["entropy_bottleneck._cdf_length"]
-        del checkpoint["state_dict"]["gaussian_conditional._offset"]
-        del checkpoint["state_dict"]["gaussian_conditional._quantized_cdf"]
-        del checkpoint["state_dict"]["gaussian_conditional._cdf_length"]
-        del checkpoint["state_dict"]["gaussian_conditional.scale_table"]
-        """
-            
         print("DOPO: ",aux_net.g_a[0].weight[0])
         #aux_net = from_state_dict(aux_net,checkpoint["state_dict"])
         aux_net.update(force = True)
@@ -246,20 +243,46 @@ def main(argv):
     N = args.dimension
     M = args.dimension_m
     if args.model == "cnn":# and args.baseline is False :
-        if True:
+        if args.path_adapter == "":
             print("io entro qua, è la cosa guysta!")
             net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration , pretrained_model = aux_net)
             sos = True
         else: 
-            print("io entro qua, è la cosa guysta!")
-            net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration , pretrained_model = aux_net)
+            print("qua ci entro se faccio adapter o riprendo il training!!!!")
+
+
+            architecture =   models[args.model]
+            checkpoint = torch.load(args.path_adapter, map_location=device)
+
+            factorized_configuration =checkpoint["factorized_configuration"]
+            if args.adapt:
+                factorized_configuration["beta"] = 10
+                factorized_configuration["trainable"] = True
+            gaussian_configuration =  checkpoint["gaussian_configuration"]
+            if args.adapt:
+                gaussian_configuration["beta"] = 10
+                gaussian_configuration["trainable"] = True
+            net =architecture(192, 320, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration)
+            net = net.to(device)              
+            net.update( device = device)
+            net.load_state_dict(checkpoint["state_dict"])  
+            print("**************************************************************************************************************") 
+            print("**************************************************************************************************************")  
+            net.entropy_bottleneck.sos.update_state(device = device )
+            net.gaussian_conditional.sos.update_state(device = device)
+            print("weightsss!!!!- ",net.gaussian_conditional.sos.cum_w)
+            
+            print("************** ho finito il caricamento!***********************************************************************************************")  
+            print("**************************************************************************************************************")  
+
+            net.update( device = device)
             sos = True
 
 
 
     elif args.model == "cnn_base":
         print("attn block base method")
-        if args.pret_checkpoint is not None: 
+        if args.pret_checkpoint is not None and args.adapt is False: 
 
             print("entroa qua per la baseline!!!!")
             #net.update(force = True)
@@ -326,20 +349,21 @@ def main(argv):
     counter = 0
     best_loss = float("inf")
     epoch_enc = 0
-    previous_lr = optimizer.param_groups[0]['lr']
+    
 
 
 
 
-    if args.model == "cnn_base" and args.pret_checkpoint_base is not None: 
-        print("ENTRO QUAAAAAAA!")    
-        checkpoint = torch.load(args.pret_checkpoint_base, map_location=device)       
-        optimizer.load_state_dict(checkpoint["optimizer"])
+    if args.path_adapter != "" and args.adapt is False: 
+        print("faccio il reload degli adapter!")    
+        #checkpoint = torch.load(args.pret_checkpoint_base, map_location=device)      
+        checkpoint = torch.load(args.path_adapter, map_location=device) 
+        optimizer.load_state_dict(checkpoint["optimizer"] )
         #aux_optimizer.load_state_dict(checkpoint["aux_optimizer"])
         lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])   
 
 
-
+    previous_lr = optimizer.param_groups[0]['lr']
     model_tr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
     model_fr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad== False)
         
@@ -353,11 +377,10 @@ def main(argv):
 
 
 
-
-    #net.freeze_net() 
-
-    print("start unfreezing")
-    #net.unfreeze_quantizer()
+    if args.adapt:
+        net.freeze_net() 
+        print("start unfreezing")
+        net.unfreeze_quantizer()
     #net.unfreeze_entropy_model()
     #net.unfreeze_entropy_parameters()
     #net.unfreeze_context()
@@ -488,11 +511,15 @@ def main(argv):
 
         
         
-        if epoch%25==0:
+        if epoch%20==0:
             print("entro qua")
+
+
+            # create filepath 
+            filelist = [os.path.join("/scratch/dataset/kodak", f) for f in os.listdir("/scratch/dataset/kodak")]
             net.update()
             epoch_enc += 1
-            #compress_with_ac(net, test_dataloader, device, epoch_enc, baseline = args.baseline)
+            #compress_with_ac(net, filelist, device, epoch_enc, baseline = args.baseline)
             if args.baseline is False and sos: 
                 plot_sos(net, device)
         
@@ -548,7 +575,7 @@ def main(argv):
         
 
 if __name__ == "__main__":
-    wandb.init(project="NeuralADQ_zou22", entity="albertopresta")   
+    wandb.init(project="NeuralADQ_zou22_adapter", entity="albertopresta")   
     main(sys.argv[1:])
 
 

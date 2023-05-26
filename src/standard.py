@@ -71,7 +71,6 @@ def collect(
     metrics: List[str],
     num_jobs: int = 1,
 ):
-    print("heeeeey----> ",print(dataset),"   ",print(os.listdir(dataset)))
     if not Path(dataset).is_dir():
         raise OSError(f"No such directory: {dataset}")
 
@@ -82,7 +81,6 @@ def collect(
     pool = mp.Pool(num_jobs) if num_jobs > 1 else None
 
     if len(filepaths) == 0:
-        print("------> ",filepaths)
         print("No images found in the dataset directory")
         sys.exit(1)
 

@@ -347,110 +347,6 @@ class WACNNSoS(CompressionModel):
         net.load_state_dict(state_dict)
         return net
 
-    def compress_bench(self, x):
-        y = self.g_a(x)
-        y_shape = y.shape[2:]
-
-        z = self.h_a(y)
-        perm, inv_perm = self.define_permutation(z)
-        z_strings, entropy_bottleneck_cdf = self.entropy_bottleneck.compress(z, perms = [perm, inv_perm])
-        z_hat = self.entropy_bottleneck.decompress( z_strings, entropy_bottleneck_cdf)
-        print("lo shape di z_hat è proprio-----> ",z_hat.shape)
-        latent_scales = self.h_scale_s(z_hat)
-        latent_means = self.h_mean_s(z_hat)
-
-        y_slices = y.chunk(self.num_slices, 1)
-        y_hat_slices = []
-        y_scales = []
-        y_means = []
-
-        #cdf = self.gaussian_conditional.quantized_cdf.tolist()
-        #cdf_lengths = self.gaussian_conditional.cdf_length.reshape(-1).int().tolist()
-        #offsets = self.gaussian_conditional.offset.reshape(-1).int().tolist()
-
-        #encoder = BufferedRansEncoder()
-        symbols_list = []
-        indexes_list = []
-        y_strings = []
-
-
-        perm, inv_perm = self.define_permutation(y)
-
-
-
-
-        for slice_index, y_slice in enumerate(y_slices):
-            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
-
-            mean_support = torch.cat([latent_means] + support_slices, dim=1)
-            mu = self.cc_mean_transforms[slice_index](mean_support)
-            mu = mu[:, :, :y_shape[0], :y_shape[1]]
-
-            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-            scale = self.cc_scale_transforms[slice_index](scale_support)
-            scale = scale[:, :, :y_shape[0], :y_shape[1]]
-
-            index = self.gaussian_conditional.build_indexes(scale)
-
-            perm, inv_perm = self.define_permutation(y_slice)
-            y_q_slice = self.gaussian_conditional.quantize(y_slice, mode = "symbols",  perms = [perm,inv_perm], means = mu)
-
-
-            symbols_list.extend(y_q_slice.reshape(-1).tolist())
-            indexes_list.extend(index.reshape(-1).tolist())
-
-
-            y_q_slice = self.gaussian_conditional.dequantize(y_q_slice)
-            y_hat_slice = y_q_slice + mu
-
-            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-            lrp = self.lrp_transforms[slice_index](lrp_support)
-            lrp = 0.5 * torch.tanh(lrp)
-            y_hat_slice += lrp
-
-            y_hat_slices.append(y_hat_slice)
-            y_scales.append(scale)
-            y_means.append(mu)
-            #y_scales.extend(scale.reshape(-1).tolist())
-            #y_means.extend(mu.reshape(-1).tolist())
-
-        y_tens = torch.Tensor(symbols_list)
-        indexes_tens = torch.Tensor(indexes_list)
-
-
-
-
-        #means = torch.Tensor(y_means) 
-        #scales = torch.Tensor(y_scales)
-        means_hat = torch.cat(y_means,dim = 1) 
-        indexes_tens = indexes_tens.reshape(means_hat.shape)       
-        y_strings, gaussian_cdf , shape_symbols  = self.gaussian_conditional.compress(y, indexes_tens,  [perm, inv_perm], means=means_hat)
-        #y_strings, gaussian_cdf , shape_symbols  = self.gaussian_conditional.compress(y_tens, indexes_tens)
-
-        return {"strings": [y_strings, z_strings], 
-                "cdfs": [gaussian_cdf, entropy_bottleneck_cdf],
-                "shape": [ shape_symbols, z.size()[-2:],], 
-                "params": {"means": y_means, "scales":y_scales}}
-
-
-
-    def decompress_bench(self, data):
-
-
-        strings = data["strings"]
-        cdfs = data["cdfs"]
-        shapes = data["shape"]
-        means_hat = data["params"]["means"]
-
-        #w0,w1,w2,w3 = means_hat.shape
-        means_hat = torch.cat(means_hat,dim = 1)
-        shapes = means_hat.shape 
-        print("means shape: ",shapes)
-        y_hat = self.gaussian_conditional.decompress(strings[0], cdfs[0],shapes, means = means_hat)
-        x_hat = self.g_s(y_hat)
-        return {"x_hat": x_hat, "y_hat": y_hat}
-
-
 
     def compress(self,x): 
 
@@ -726,7 +622,111 @@ class WACNNSoS(CompressionModel):
 
 
 
+    """
+    def compress_bench(self, x):
+        y = self.g_a(x)
+        y_shape = y.shape[2:]
 
+        z = self.h_a(y)
+        perm, inv_perm = self.define_permutation(z)
+        z_strings, entropy_bottleneck_cdf = self.entropy_bottleneck.compress(z, perms = [perm, inv_perm])
+        z_hat = self.entropy_bottleneck.decompress( z_strings, entropy_bottleneck_cdf)
+        print("lo shape di z_hat è proprio-----> ",z_hat.shape)
+        latent_scales = self.h_scale_s(z_hat)
+        latent_means = self.h_mean_s(z_hat)
+
+        y_slices = y.chunk(self.num_slices, 1)
+        y_hat_slices = []
+        y_scales = []
+        y_means = []
+
+        #cdf = self.gaussian_conditional.quantized_cdf.tolist()
+        #cdf_lengths = self.gaussian_conditional.cdf_length.reshape(-1).int().tolist()
+        #offsets = self.gaussian_conditional.offset.reshape(-1).int().tolist()
+
+        #encoder = BufferedRansEncoder()
+        symbols_list = []
+        indexes_list = []
+        y_strings = []
+
+
+        perm, inv_perm = self.define_permutation(y)
+
+
+
+
+        for slice_index, y_slice in enumerate(y_slices):
+            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
+
+            mean_support = torch.cat([latent_means] + support_slices, dim=1)
+            mu = self.cc_mean_transforms[slice_index](mean_support)
+            mu = mu[:, :, :y_shape[0], :y_shape[1]]
+
+            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
+            scale = self.cc_scale_transforms[slice_index](scale_support)
+            scale = scale[:, :, :y_shape[0], :y_shape[1]]
+
+            index = self.gaussian_conditional.build_indexes(scale)
+
+            perm, inv_perm = self.define_permutation(y_slice)
+            y_q_slice = self.gaussian_conditional.quantize(y_slice, mode = "symbols",  perms = [perm,inv_perm], means = mu)
+
+
+            symbols_list.extend(y_q_slice.reshape(-1).tolist())
+            indexes_list.extend(index.reshape(-1).tolist())
+
+
+            y_q_slice = self.gaussian_conditional.dequantize(y_q_slice)
+            y_hat_slice = y_q_slice + mu
+
+            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
+            lrp = self.lrp_transforms[slice_index](lrp_support)
+            lrp = 0.5 * torch.tanh(lrp)
+            y_hat_slice += lrp
+
+            y_hat_slices.append(y_hat_slice)
+            y_scales.append(scale)
+            y_means.append(mu)
+            #y_scales.extend(scale.reshape(-1).tolist())
+            #y_means.extend(mu.reshape(-1).tolist())
+
+        y_tens = torch.Tensor(symbols_list)
+        indexes_tens = torch.Tensor(indexes_list)
+
+
+
+
+        #means = torch.Tensor(y_means) 
+        #scales = torch.Tensor(y_scales)
+        means_hat = torch.cat(y_means,dim = 1) 
+        indexes_tens = indexes_tens.reshape(means_hat.shape)       
+        y_strings, gaussian_cdf , shape_symbols  = self.gaussian_conditional.compress(y, indexes_tens,  [perm, inv_perm], means=means_hat)
+        #y_strings, gaussian_cdf , shape_symbols  = self.gaussian_conditional.compress(y_tens, indexes_tens)
+
+        return {"strings": [y_strings, z_strings], 
+                "cdfs": [gaussian_cdf, entropy_bottleneck_cdf],
+                "shape": [ shape_symbols, z.size()[-2:],], 
+                "params": {"means": y_means, "scales":y_scales}}
+
+
+
+    def decompress_bench(self, data):
+
+
+        strings = data["strings"]
+        cdfs = data["cdfs"]
+        shapes = data["shape"]
+        means_hat = data["params"]["means"]
+
+        #w0,w1,w2,w3 = means_hat.shape
+        means_hat = torch.cat(means_hat,dim = 1)
+        shapes = means_hat.shape 
+        print("means shape: ",shapes)
+        y_hat = self.gaussian_conditional.decompress(strings[0], cdfs[0],shapes, means = means_hat)
+        x_hat = self.g_s(y_hat)
+        return {"x_hat": x_hat, "y_hat": y_hat}
+
+    """
 
 
 

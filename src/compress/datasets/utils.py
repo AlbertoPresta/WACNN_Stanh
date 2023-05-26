@@ -29,7 +29,7 @@ class ImageFolder(Dataset):
 
         self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]
         if split == "train":
-            num_images = 24016
+            num_images = num_images
             
         else:
             num_images = 1024

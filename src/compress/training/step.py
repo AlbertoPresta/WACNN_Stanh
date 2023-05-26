@@ -2,6 +2,11 @@ import torch
 import torch.nn as nn
 import wandb
 from compress.utils.help_function import compute_msssim, compute_psnr
+from compressai.ops import compute_padding
+from PIL import Image
+from torchvision import transforms
+import torch
+import torch.nn.functional as F
 
 class AverageMeter:
     """Compute running average."""
@@ -254,11 +259,20 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos):
     return loss.avg
 
 
+def read_image(filepath, clic =False):
+    #assert filepath.is_file()
+    img = Image.open(filepath)
+    
+    if clic:
+        i =  img.size
+        i = i[0]//2, i[1]//2
+        img = img.resize(i)
+    img = img.convert("RGB")
+    return transforms.ToTensor()(img)
 
 
 
-
-def compress_with_ac(model, test_dataloader, device, epoch, baseline = False, fact = False):
+def compress_with_ac(model, filelist, device, epoch, baseline = False):
     #model.update(None, device)
     print("ho finito l'update")
     bpp_loss = AverageMeter()
@@ -267,15 +281,23 @@ def compress_with_ac(model, test_dataloader, device, epoch, baseline = False, fa
 
     
     with torch.no_grad():
-        for i,d in enumerate(test_dataloader): 
+        for i,d in enumerate(filelist): 
             if baseline is False:
                 print("-------------    ",i,"  --------------------------------")
-                d = d.to(device)
+                x = read_image(d).to(device)
+                x = x.unsqueeze(0) 
+                h, w = x.size(2), x.size(3)
+                pad, unpad = compute_padding(h, w, min_div=2**6)  # pad to allow 6 strides of 2
+                x_padded = F.pad(x, pad, mode="constant", value=0)
 
-                data = model.compress(d)
-                out_net = model(d,  training = False)
+
+                data = model.compress(x_padded)
+                out_net = model(x_padded,  training = False)
                 out_dec = model.decompress(data)
-                
+
+                out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
+                out_net["x_hat"] = F.pad(out_dec["x_hat"], unpad)
+
 
 
 
@@ -283,12 +305,11 @@ def compress_with_ac(model, test_dataloader, device, epoch, baseline = False, fa
                 out_net["x_hat"].clamp(0.,1.)
                 
 
-                bpp, bpp_1, bpp_2= bpp_calculation(out_dec, data["strings"], fact = fact)
-                #bpp, bpp_1, bpp_2= bpp_calculation_factorized(out_dec, data["strings"])
+                bpp, bpp_1, bpp_2= bpp_calculation(out_dec, data["strings"])
                 bpp_loss.update(bpp)
-                psnr.update(compute_psnr(d, out_dec["x_hat"]))
+                psnr.update(compute_psnr(x, out_dec["x_hat"]))
 
-                mssim.update(compute_msssim(d, out_net["x_hat"]))   
+                mssim.update(compute_msssim(x, out_net["x_hat"]))   
                 print("bpp---> ",bpp,"  ",bpp_1,"   ",bpp_2) 
 
                     
@@ -335,25 +356,12 @@ def compress_with_ac(model, test_dataloader, device, epoch, baseline = False, fa
     return bpp_loss.avg
 
 
-
-def bpp_calculation(out_net, out_enc, fact = False):
+def bpp_calculation(out_net, out_enc):
         size = out_net['x_hat'].size() 
         num_pixels = size[0] * size[2] * size[3]
-        if fact is False:
-            bpp_1 = (len(out_enc[0]) * 8.0 ) / num_pixels
-            bpp_2 =  (len(out_enc[1]) * 8.0 ) / num_pixels
-            return bpp_1 + bpp_2, bpp_1, bpp_2
-        else:
-            bpp = (len(out_enc[0]) * 8.0 ) / num_pixels 
-            return bpp, bpp, bpp
 
-
-def bpp_calculation_factorized(out_net, out_enc):
-        size = out_net['x_hat'].size() 
-        num_pixels = size[0] * size[2] * size[3]
-        bpp = (len(out_enc[0]) * 8.0 ) / num_pixels
-        #bpp_2 =  (len(out_enc[1]) * 8.0 ) / num_pixels
-
-        return bpp
+        bpp_1 = (len(out_enc[0]) * 8.0 ) / num_pixels
+        bpp_2 =  sum( (len(out_enc[1][i]) * 8.0 ) / num_pixels for i in range(len(out_enc[1])))
+        return bpp_1 + bpp_2, bpp_1, bpp_2
 
 

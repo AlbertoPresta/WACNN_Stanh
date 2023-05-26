@@ -152,7 +152,7 @@ class SumOfTanh(nn.Module):
 
 
 class NonLinearStanh(nn.Module):
-    def __init__(self, beta,  num_sigmoids,  extrema = 5, trainable = False):
+    def __init__(self, beta,  num_sigmoids,  extrema = 5, trainable =False):
         super(NonLinearStanh, self).__init__()
         print("non-linear-sum")
         self.num_sigmoids = int(num_sigmoids)

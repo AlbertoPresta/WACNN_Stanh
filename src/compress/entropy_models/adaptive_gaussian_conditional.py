@@ -574,19 +574,23 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
         values = values.reshape(1, 1, -1) # reshape values
         if means is not None:
             means = means.permute(*perms[0]).contiguous()
-            means = means.reshape(1, 1, -1).to(x.device)     
+            means = means.reshape(1, 1, -1)#.to(x.device)     
 
         y_hat = self.quantize(values, "training" if training else "dequantize", means = means)
         
         y_hat = y_hat.reshape(shape)
         y_hat = y_hat.permute(*perms[1]).contiguous()
 
+        #values = values.reshape(shape)
+        #values = values.permute(*perms[1]).contiguous()
+
         if means is not None:
             means = means.reshape(shape)
             means = means.permute(*perms[1]).contiguous()
 
 
-        likelihood = self._likelihood(y_hat, scales, means = means).to(x.device)
+        likelihood = self._likelihood(y_hat, scales, means = means)#.to(x.device)
+        #likelihood = self._likelihood(values, scales, means = means).to(x.device)
         if self.use_likelihood_bound:
             likelihood = self.likelihood_lower_bound(likelihood)  
         return y_hat, likelihood 
