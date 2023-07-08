@@ -255,11 +255,11 @@ class HypeEntropyModelSoS(nn.Module):
             output_cdf[i,:] = self.cdf[indexes[i].item(),:]
         byte_stream = torchac.encode_float_cdf(output_cdf, symbols, check_input_bounds=True)
 
-        c = torchac.decode_float_cdf(output_cdf, byte_stream)
-        if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
-            raise ValueError("L'output Gaussiano codificato è diverso, qualcosa non va!")
-        else:
-            print("l'immagine è ok!")
+        #c = torchac.decode_float_cdf(output_cdf, byte_stream)
+        #if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
+        #    raise ValueError("L'output Gaussiano codificato è diverso, qualcosa non va!")
+        #else:
+        #    print("l'immagine è ok!")
         return byte_stream, output_cdf, shape_symbols  
 
 
@@ -387,12 +387,12 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
     def update(self, device = torch.device("cuda")):
 
         #device = self.sos.cum_w.device
-        print("***************************************************************************")
-        print("***************************************************************************")
-        print("***************************************************************************")
-        print("***************************************************************************")
-        print("***************************************************************************")
-        print("***************************************************************************")
+        #print("***************************************************************************")
+        #print("***************************************************************************")
+        #print("***************************************************************************")
+        #print("***************************************************************************")
+        #print("***************************************************************************")
+        #print("***************************************************************************")
         self.sos.update_state(device)
         max_length = self.sos.cum_w.shape[0]
             
@@ -446,10 +446,10 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
         #self._offset = self.sos.cum_w[0].item() - 1
         self._offset = self._offset.int()
         self._cdf_length = pmf_length + 2
-        print("shape of lengt is ", self._cdf_length.shape )
+        #print("shape of lengt is ", self._cdf_length.shape )
         self._cdf_length = self._cdf_length.squeeze(1)
-        print("shape of lengt is ", self._cdf_length.shape )
-        print("finito l'update")
+        #print("shape of lengt is ", self._cdf_length.shape )
+        #print("finito l'update")
         ###################################################################################
         self.pmf = pmf
         self.cdf =  self.pmf_to_cdf()
@@ -589,7 +589,7 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
             means = means.permute(*perms[1]).contiguous()
 
 
-        likelihood = self._likelihood(y_hat, scales, means = means)#.to(x.device)
+        likelihood = self._likelihood(y_hat, scales, means = means)#.to(x.device)  nuovo !!
         #likelihood = self._likelihood(values, scales, means = means).to(x.device)
         if self.use_likelihood_bound:
             likelihood = self.likelihood_lower_bound(likelihood)  
@@ -645,9 +645,9 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
                 means = means.reshape(1, 1, -1) # reshape values
         else:
             values = x
-        print("lo shape di values prima è: ",values.shape)
+        #print("lo shape di values prima è: ",values.shape)
         x = self.quantize(values, "symbols", means = means)  
-        print("lo shape di x prima è: ",x.shape)
+        #print("lo shape di x prima è: ",x.shape)
 
         if perms is not None:
             #print("mannaggia a satana io non devo entrare qua!!!")

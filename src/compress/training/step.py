@@ -90,6 +90,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
             )
 
 
+
         wand_dict = {
             "train_batch": counter,
             #"train_batch/delta": model.gaussian_conditional.sos.delta.data.item(),
@@ -206,7 +207,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
 
 
 
-def test_epoch(epoch, test_dataloader, model, criterion, sos):
+def test_epoch(epoch, test_dataloader, model, criterion, sos, valid):
     model.eval()
     device = next(model.parameters()).device
 
@@ -237,22 +238,39 @@ def test_epoch(epoch, test_dataloader, model, criterion, sos):
             psnr.update(compute_psnr(d, out_net["x_hat"]))
             ssim.update(compute_msssim(d, out_net["x_hat"]))
 
-    print(
-        f"Test epoch {epoch}: Average losses:"
-        f"\tLoss: {loss.avg:.3f} |"
-        f"\tMSE loss: {mse_loss.avg * 255 ** 2 / 3:.3f} |"
-        f"\tBpp loss: {bpp_loss.avg:.2f} |"
-    )
 
 
-    log_dict = {
-    "test":epoch,
-    "test/loss": loss.avg,
-    "test/bpp":bpp_loss.avg,
-    "test/mse": mse_loss.avg,
-    "test/psnr":psnr.avg,
-    "test/ssim":ssim.avg,
-    }
+    if valid is False:
+        print(
+            f"Test epoch {epoch}: Average losses:"
+            f"\tLoss: {loss.avg:.3f} |"
+            f"\tMSE loss: {mse_loss.avg * 255 ** 2 / 3:.3f} |"
+            f"\tBpp loss: {bpp_loss.avg:.2f} |"
+        )
+        log_dict = {
+        "test":epoch,
+        "test/loss": loss.avg,
+        "test/bpp":bpp_loss.avg,
+        "test/mse": mse_loss.avg,
+        "test/psnr":psnr.avg,
+        "test/ssim":ssim.avg,
+        }
+    else:
+
+        print(
+            f"valid epoch {epoch}: Average losses:"
+            f"\tLoss: {loss.avg:.3f} |"
+            f"\tMSE loss: {mse_loss.avg * 255 ** 2 / 3:.3f} |"
+            f"\tBpp loss: {bpp_loss.avg:.2f} |"
+        )
+        log_dict = {
+        "valid":epoch,
+        "valid/loss": loss.avg,
+        "valid/bpp":bpp_loss.avg,
+        "valid/mse": mse_loss.avg,
+        "valid/psnr":psnr.avg,
+        "valid/ssim":ssim.avg,
+        }       
 
     wandb.log(log_dict)
 
@@ -291,10 +309,12 @@ def compress_with_ac(model, filelist, device, epoch, baseline = False):
                 x_padded = F.pad(x, pad, mode="constant", value=0)
 
 
-                data = model.compress(x_padded)
-                out_net = model(x_padded,  training = False)
-                out_dec = model.decompress(data)
-
+                #data = model.compress(x_padded)
+                print("shape: ",x_padded.shape)
+                out_enc = model.compress(x_padded)
+                #out_net = model(x_padded,  training = False)
+                #out_dec = model.decompress(data)
+                out_dec = model.decompress(out_enc["strings"], out_enc["shape"])
                 out_dec["x_hat"] = F.pad(out_dec["x_hat"], unpad)
                 out_net["x_hat"] = F.pad(out_dec["x_hat"], unpad)
 

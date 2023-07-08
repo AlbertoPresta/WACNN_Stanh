@@ -84,12 +84,15 @@ class Annealings(nn.Module):
 
     def step(self, gap, epoch, lss, plat = False):
         if self.type == "linear":
-            if self.starting_epochs <= epoch and self.beta < 100000:
+            if  self.beta < 50000:
                 if self.decreasing is False or self.dec_epoc > epoch:
                     self.beta += self.factor/self.iteration 
                 else:
                     self.beta -= self.decreasing_factor/self.iteration  
-        if self.type == "linear_stoc":
+            else:
+                self.beta = self.beta/2
+            
+        elif self.type == "linear_stoc":
             self.max_beta += self.factor/self.iteration
             self.beta = torch.empty_like(torch.tensor([0.0])).uniform_(1,  self.beta_max).item() 
         

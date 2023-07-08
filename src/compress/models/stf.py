@@ -11,7 +11,7 @@ from compressai.ans import BufferedRansEncoder, RansDecoder
 from compress.layers import conv3x3, subpel_conv3x3
 from compress.ops import ste_round
 from .base import CompressionModel
-
+import time
 # From Balle's tensorflow compression examples
 SCALES_MIN = 0.11
 SCALES_MAX = 256
@@ -674,6 +674,8 @@ class SymmetricalTransFormer(CompressionModel):
 
 
     def compress(self, x):
+        print("start compression phase----> ")
+        startt = time.time()
         x = self.patch_embed(x)
 
         Wh, Ww = x.size(2), x.size(3)
@@ -734,9 +736,13 @@ class SymmetricalTransFormer(CompressionModel):
         y_string = encoder.flush()
         y_strings.append(y_string)
 
+
+        #print("ending compression!!,", time.time() - startt)
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
 
     def decompress(self, strings, shape):
+        #print("start decompression!!!! ")
+        startt = time.time()
         assert isinstance(strings, list) and len(strings) == 2
         z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
         latent_scales = self.h_scale_s(z_hat)
@@ -787,6 +793,7 @@ class SymmetricalTransFormer(CompressionModel):
             y_hat, Wh, Ww = layer(y_hat, Wh, Ww)
 
         x_hat = self.end_conv(y_hat.view(-1, Wh, Ww, self.embed_dim).permute(0, 3, 1, 2).contiguous()).clamp_(0, 1)
+        print("end decompression: ",startt - time.time())
         return {"x_hat": x_hat}
 
 

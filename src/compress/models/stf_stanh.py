@@ -841,7 +841,7 @@ class SymmetricalTransFormerSoS(CompressionModel):
 
 def modify_bottlenecks(net, factorized_configuration, gaussian_configuration):
     net.entropy_bottleneck = EntropyBottleneckSoS(48*4, 
-                                               beta = factorized_configuration["beta"], 
+                                                beta = factorized_configuration["beta"], 
                                                 num_sigmoids = factorized_configuration["num_sigmoids"], 
                                                 activation = factorized_configuration["activation"],
                                                 extrema = factorized_configuration["extrema"],

@@ -13,7 +13,7 @@ import pandas as pd
 class SumOfTanh(nn.Module):
     def __init__(self, beta,  num_sigmoids, extrema = 5, symmetry =True):
         super(SumOfTanh, self).__init__()
-        print("SOMMA NON LINEARE!!!!")
+        #print("SOMMA NON LINEARE!!!!")
 
         self.num_sigmoids = int(num_sigmoids)
         self.beta = beta
@@ -152,9 +152,9 @@ class SumOfTanh(nn.Module):
 
 
 class NonLinearStanh(nn.Module):
-    def __init__(self, beta,  num_sigmoids,  extrema = 5, trainable =False):
+    def __init__(self, beta,  num_sigmoids,  extrema = 5, trainable =True):
         super(NonLinearStanh, self).__init__()
-        print("non-linear-sum")
+        #print("non-linear-sum")
         self.num_sigmoids = int(num_sigmoids)
         self.beta = beta
         self.extrema = extrema     
@@ -187,7 +187,7 @@ class NonLinearStanh(nn.Module):
     
         self.tr_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
 
-        print("trainable parameters for the quantizer: ",self.tr_parameters)
+        #print("trainable parameters for the quantizer: ",self.tr_parameters)
 
 
         self.length = len(self.range_num) if self.num_sigmoids ==0 else self.num_sigmoids 
@@ -333,7 +333,7 @@ class DeltaQuantized(nn.Module):
         self.map_cdf_sos = {}
 
         self.tr_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        print("count number of parameters for the quantizer: ",self.tr_parameters )
+        #print("count number of parameters for the quantizer: ",self.tr_parameters )
 
     
     def update_state(self, device = torch.device("cuda")):
@@ -400,7 +400,7 @@ class ActualQuantizer(nn.Module):
         super(ActualQuantizer, self).__init__()
 
 
-        print("entro qua!!!!!!")
+        #print("entro qua!!!!!!")
         self.M = M
         self.num_sigmoids = int(num_sigmoids)
         self.beta = beta
@@ -430,7 +430,7 @@ class ActualQuantizer(nn.Module):
         self.cum_w = torch.zeros(self.length + 1)
         self.cum_w[1:] = torch.cumsum(self.w,dim = 0)  
         self.cum_w = torch.cat((-torch.flip(self.cum_w[1:], dims = [0]),self.cum_w),dim = 0)
-        print("CUMULATIVE WEIGHTS ARE: ",self.cum_w)
+        #print("CUMULATIVE WEIGHTS ARE: ",self.cum_w)
 
 
         self.calculate_average_points()
@@ -442,7 +442,7 @@ class ActualQuantizer(nn.Module):
 
     
         self.tr_parameters = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        print("count number of parameters for the quantizer: ",self.tr_parameters )
+        #print("count number of parameters for the quantizer: ",self.tr_parameters )
 
 
 

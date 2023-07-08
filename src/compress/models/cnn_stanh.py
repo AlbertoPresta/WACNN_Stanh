@@ -174,7 +174,7 @@ class WACNNSoS(CompressionModel):
 
         if  pretrained_model is not None:
             #self.replace_net(pretrained_model)
-            print("replacing the net!")
+            #print("replacing the net!")
             """
             self.g_a = pretrained_model.g_a
             self.g_s = pretrained_model.g_s
@@ -187,16 +187,16 @@ class WACNNSoS(CompressionModel):
             self.initialize_entropy_model(pretrained_model.entropy_bottleneck)
 
             """
-            print("prima di fare l'update abbiamo che: ",self.g_a[0].weight[0])
+            #print("prima di fare l'update abbiamo che: ",self.g_a[0].weight[0])
             self.initialize_bottleneck_autoencoder(pretrained_model) #g_a , g_s
-            print("finish autoencoder")
+            #print("finish autoencoder")
             self.initialize_entropy_model(pretrained_model.entropy_bottleneck) # nn-based neural network 
-            print("finish entropy model")
+            #print("finish entropy model")
             self.initialize_hyperprior(pretrained_model) # h_a, h_mean_s, h_scale_s 
-            print("finish hyperprior")
+            #print("finish hyperprior")
             self.initialize_cc(pretrained_model) # cc_mean_transforms, cc_scale_transforms, lrp_transforms
-            print("finisch all")
-            print("DOPO: ",self.g_a[0].weight[0])
+            #print("finisch all")
+            #print("DOPO: ",self.g_a[0].weight[0])
             
     
     def freeze_net(self):
@@ -226,7 +226,7 @@ class WACNNSoS(CompressionModel):
             scale_table = get_scale_table() # ottengo la scale table 
         self.gaussian_conditional.update_scale_table(scale_table)
         self.gaussian_conditional.update(device = device)
-        print("updated entire model")
+        #print("updated entire model")
 
     def compute_gap(self, inputs, y_hat, gaussian, perms = None):
         values =  inputs.permute(*perms[0]).contiguous() # flatten y and call it values
@@ -352,7 +352,7 @@ class WACNNSoS(CompressionModel):
 
         y = self.g_a(x)
         y_shape = y.shape[2:]
-        print("Y SHAPE------> ",y_shape)
+        #print("Y SHAPE------> ",y_shape)
 
         z = self.h_a(y)
 
@@ -378,7 +378,6 @@ class WACNNSoS(CompressionModel):
 
 
         for slice_index, y_slice in enumerate(y_slices):
-            print("lo shape della slice è: ",y_slice.shape)
             support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
             mean_support = torch.cat([latent_means] + support_slices, dim=1)
             mu = self.cc_mean_transforms[slice_index](mean_support)
@@ -495,10 +494,10 @@ class WACNNSoS(CompressionModel):
                     self.g_a[i].gamma_reparam.pedestal = pretrained_model.g_a[i].gamma_reparam.pedestal
                     self.g_a[i].gamma_reparam.pedestal.requires_grad = True   
                 else:
-                    print("implement initializer for windoe attention module")
+                    #print("implement initializer for windoe attention module")
                     self.g_a[i].initialize_weights(pretrained_model.g_a[i])
-        print("numbers of trainable parameters of the g_a: ", sum(p.numel() for p in self.g_a.parameters() if p.requires_grad))
-        print("numbers of FREEZED parameters of the g_a: ", sum(p.numel() for p in self.g_a.parameters() if not p.requires_grad)) 
+        #print("numbers of trainable parameters of the g_a: ", sum(p.numel() for p in self.g_a.parameters() if p.requires_grad))
+        #print("numbers of FREEZED parameters of the g_a: ", sum(p.numel() for p in self.g_a.parameters() if not p.requires_grad)) 
 
         with torch.no_grad():
             for i,l in enumerate(pretrained_model.g_s):
@@ -517,10 +516,10 @@ class WACNNSoS(CompressionModel):
                     self.g_s[i].gamma_reparam.pedestal = pretrained_model.g_s[i].gamma_reparam.pedestal
                     self.g_s[i].gamma_reparam.pedestal.requires_grad = True   
                 else:
-                    print("implement initializer for windoe attention module")
+                    #print("implement initializer for windoe attention module")
                     self.g_s[i].initialize_weights(pretrained_model.g_s[i])
-        print("numbers of trainable parameters of the g_s: ", sum(p.numel() for p in self.g_s.parameters() if p.requires_grad))
-        print("numbers of FREEZED parameters of the g_s: ", sum(p.numel() for p in self.g_s.parameters() if not p.requires_grad)) 
+        #print("numbers of trainable parameters of the g_s: ", sum(p.numel() for p in self.g_s.parameters() if p.requires_grad))
+        #print("numbers of FREEZED parameters of the g_s: ", sum(p.numel() for p in self.g_s.parameters() if not p.requires_grad)) 
 
     def initialize_entropy_model(self, entropy_model = None):
         """
@@ -545,7 +544,7 @@ class WACNNSoS(CompressionModel):
                     nn.init.zeros_(factor)
                     self.entropy_bottleneck.register_parameter(f"_factor{i:d}", nn.Parameter(factor)) 
         else:
-            print("CHECK HERE!!! take baseline entropy model")
+            #print("CHECK HERE!!! take baseline entropy model")
             num_params = 0
             for i in range(len(self.entropy_bottleneck.filters) + 1):
                 matrix = getattr( self.entropy_bottleneck, f"_matrix{i:d}")
@@ -559,7 +558,7 @@ class WACNNSoS(CompressionModel):
                     num_params +=  factor.reshape(-1).shape[0]
                     self.entropy_bottleneck.register_parameter(f"_factor{i:d}", nn.Parameter( getattr(entropy_model, f"_factor{i:d}").data)) 
 
-            print("number of countet factos: ",num_params)
+            #print("number of countet factos: ",num_params)
 
     def initialize_hyperprior(self, pretrained_model): 
         # initialize h_a
@@ -854,4 +853,4 @@ class WACNNStanh(WACNN):
             scale_table = get_scale_table() # ottengo la scale table 
         self.gaussian_conditional.update_scale_table(scale_table)
         self.gaussian_conditional.update(device = device)
-        print("updated entire model")
+        #print("updated entire model")

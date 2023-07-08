@@ -196,7 +196,7 @@ class EntropyModelSoS(nn.Module):
     def compress(self, inputs ):
         symbols = inputs #[1]
         M = symbols.size(1)
-        print("M  per il bottleneck is: ",M)
+        #print("M  per il bottleneck is: ",M)
         symbols = symbols.to(torch.int16)      
         output_cdf = torch.zeros_like(symbols,dtype=torch.int16).to(inputs.device)
         output_cdf = output_cdf[:,:,:,:,None].to(inputs.device) + torch.zeros(self.cdf.shape[1]).to(inputs.device)
@@ -263,7 +263,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         self.activation = activation
         
         
-        print("ciao!S")
+        #print("ciao!S")
         if self.activation == "aq":
             self.sos = ActualQuantizer(self.beta, self.M,self.num_sigmoids,extrema = self.extrema)
         elif self.activation == "delta":
@@ -299,7 +299,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
                     nn.init.zeros_(factor)
                     self.register_parameter(f"_factor{i:d}", nn.Parameter(factor))             
             else:
-                print("entropy model is trained from baseline")
+                #print("entropy model is trained from baseline")
                 # pretrained weights initialization 
                 init_matrix = getattr(pretrained_entropy_model, f"_matrix{i:d}").data
                 matrix = copy.deepcopy(init_matrix) #torch.Tensor(channels, filters[i + 1], filters[i]) 
@@ -316,7 +316,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
                     factor = copy.deepcopy(init_factor)
                     num_params += factor.reshape(-1).shape[0]
                     self.register_parameter(f"_factor{i:d}", nn.Parameter(factor))
-        print(" total number of parameters for the entropy model: ",num_params)      
+        #print(" total number of parameters for the entropy model: ",num_params)      
                 
             
         target = np.log(2 / self.tail_mass - 1)
@@ -424,7 +424,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
 
         samples = self.sos.cum_w
         
-        print(samples)
+
         samples = samples.repeat(self.M,1).unsqueeze(1) 
         samples = samples.to(device)
         # calculate the right intervals
@@ -437,7 +437,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
        
         v0 = v0.to(device)
         v1 = v1.to(device)
-        print("device of v1",v0.device)
+
         lower = self._logits_cumulative(v0, stop_gradient=True)
         upper = self._logits_cumulative(v1, stop_gradient=True)
         sign = -torch.sign(lower + upper)

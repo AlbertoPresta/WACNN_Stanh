@@ -52,9 +52,8 @@ class TestKodakDataset(Dataset):
     def __getitem__(self, item):
         image_ori = self.image_path[item]
         image = Image.open(image_ori).convert('RGB')
-        transform = transforms.Compose(
-        [transforms.CenterCrop(256), transforms.ToTensor()]
-    )
+        #transform = transforms.Compose([transforms.CenterCrop(256), transforms.ToTensor()])
+        transform = transforms.Compose([transforms.ToTensor()])
         return transform(image)
 
     def __len__(self):
@@ -69,7 +68,7 @@ def parse_args(argv):
     parser.add_argument("-e","--epochs",default=300,type=int,help="Number of epochs (default: %(default)s)",)
     parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
     parser.add_argument("-n","--num-workers",type=int,default=8,help="Dataloaders threads (default: %(default)s)",)
-    parser.add_argument("--lmbda",type=float,default=0.0032,help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--lmbda",type=float,default=0.022, help="Bit-rate distortion parameter (default: %(default)s)",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)")
     parser.add_argument("--test-batch-size",type=int,default=64,help="Test batch size (default: %(default)s)",)
     parser.add_argument( "--aux-learning-rate", default=1e-3, type=float, help="Auxiliary loss learning rate (default: %(default)s)",)
@@ -82,8 +81,9 @@ def parse_args(argv):
     parser.add_argument("--checkpoint", type=str, help="Path to a checkpoint")
 
     parser.add_argument("-ni","--num_images",default = 8016, type = int)
+    parser.add_argument("-niv","--num_images_val",default = 1024, type = int)
 
-
+    parser.add_argument("-lt","--loss_type",default = "mse", type = str)
     parser.add_argument("-dims","--dimension",default=192,type=int,help="Number of epochs (default: %(default)s)",) 
     parser.add_argument("-dims_m","--dimension_m",default=320,type=int,help="Number of epochs (default: %(default)s)",)
     parser.add_argument("-q","--quality",default=3,type=int,help="Number of epochs (default: %(default)s)",)
@@ -94,9 +94,9 @@ def parse_args(argv):
     parser.add_argument("--fact_beta",default=10,type=float,help="factorized_beta",)
     parser.add_argument("--fact_num_sigmoids",default =0,type=int,help="factorized_beta",)
     parser.add_argument("--fact_extrema",default=20,type=int,help="factorized_extrema",)
-    parser.add_argument("--fact_gp",default=10,type=int,help="factorized_beta",)
+    parser.add_argument("--fact_gp",default=15,type=int,help="factorized_beta",)
     parser.add_argument("--fact_activation",default="nonlinearstanh",type=str,help="factorized_beta",)
-    parser.add_argument("--fact_annealing",default="gap",type=str,help="factorized_annealing",)
+    parser.add_argument("--fact_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     parser.add_argument("--fact_tr",default= True,type=bool,help="factorized_tr",)
 
 
@@ -104,9 +104,9 @@ def parse_args(argv):
     parser.add_argument("--gauss_beta",default=10,type=float,help="gauss_beta",)
     parser.add_argument("--gauss_num_sigmoids",default=0,type=int,help="gauss_beta",)
     parser.add_argument("--gauss_extrema",default=60,type=int,help="gauss_extrema",)
-    parser.add_argument("--gauss_gp",default=10,type=int,help="gauss_beta",)
+    parser.add_argument("--gauss_gp",default=15,type=int,help="gauss_beta",)
     parser.add_argument("--gauss_activation",default="nonlinearstanh",type=str,help="factorized_beta",)
-    parser.add_argument("--gauss_annealing",default="gap",type=str,help="factorized_annealing",)
+    parser.add_argument("--gauss_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     parser.add_argument("--gauss_tr",default=True,type=bool,help="gauss_tr",)
 
     parser.add_argument("--baseline", default=False, type=bool, help="factorized_annealing",)
@@ -114,14 +114,15 @@ def parse_args(argv):
     parser.add_argument("--filename",default="/data/",type=str,help="factorized_annealing",)
     parser.add_argument("--suffix",default=".pth.tar",type=str,help="factorized_annealing",)
 
-    parser.add_argument("--pret_checkpoint",default = "/scratch/pretrained_models/BlockAttention/cnn_0483_best.pth.tar")
-    parser.add_argument("--pret_checkpoint_base",default =None) # "/scratch/pretrained_models/BlockAttention/base_cnn_0483.pth.tar"
+    parser.add_argument("--pret_checkpoint",default = "/scratch/pretrained_models/devil2022/q3-zou22.pth.tar")
+    
+    parser.add_argument("--pret_checkpoint_base",default ="/scratch/pretrained_models/devil2022/q3-zou22.pth.tar") # "/scratch/pretrained_models/BlockAttention/base_cnn_0483.pth.tar"
 
     parser.add_argument("--pret_checkpoint_stf",default ="/scratch/pretrained_models/stf/stf_0483.pth.tar") # "/scratch/pretrained_models/stf/stf_013.pth.tar"
-    parser.add_argument("--path_adapter",default = "/scratch/inference/pretrained_models/devil2022/q4-zou22.pth.tar" ) #/scratch/inference/pretrained_models/devil2022/q8-temp-zou2022.pth.tar
+    parser.add_argument("--path_adapter",default = "/scratch/inference/new_models/devil2022/4anchors/q6-zou22.pth.tar" ) 
     parser.add_argument("--adapt",default = True, type = bool)
     
-    # /devil2022 
+    # /devil2022  ddd
 
 
 
@@ -129,7 +130,7 @@ def parse_args(argv):
     return args
 
 def rename_key(key):
-    """Rename state_dict key."""
+    """Rename state_dict key.rrr"""
 
     # Deal with modules trained with DataParallel
     if key.startswith("module."):
@@ -137,11 +138,11 @@ def rename_key(key):
     if key.startswith('h_s.'):
         return None
 
-    # ResidualBlockWithStride: 'downsample' -> 'skip'
+    # ResidualBlockWithStride: 'downsample' -> 'skip'dd
     # if ".downsample." in key:
     #     return key.replace("downsample", "skip")
 
-    # EntropyBottleneck: nn.ParameterList to nn.Parameters
+    # EntropyBottleneck: nn.ParameterList to nn.Parameters  pppp
     if key.startswith("entropy_bottleneck."):
         if key.startswith("entropy_bottleneck._biases."):
             return f"entropy_bottleneck._bias{key[-1]}"
@@ -184,10 +185,13 @@ def main(argv):
         [transforms.RandomCrop(args.patch_size), transforms.ToTensor()]
     )
 
+    test_transforms = transforms.Compose(
+        [transforms.RandomCrop(args.patch_size), transforms.ToTensor()]
+    )
 
 
     train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images)
-    #test_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms)
+    valid_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms, num_images=args.num_images_val)
     test_dataset = TestKodakDataset(data_dir="/scratch/dataset/kodak")
     device = "cuda" if  torch.cuda.is_available() else "cpu"
 
@@ -198,6 +202,15 @@ def main(argv):
         shuffle=True,
         pin_memory=(device == "cuda"),
     )
+
+    valid_dataloader = DataLoader(
+        valid_dataset,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        shuffle=False,
+        pin_memory=(device == "cuda"),
+    )
+
 
     test_dataloader = DataLoader(
         test_dataset,
@@ -210,12 +223,11 @@ def main(argv):
 
 
     factorized_configuration , gaussian_configuration = configure_latent_space_policy(args)
-    print("gaussian configuration----- -fdddguuggfffffdddxssssxxx------>: ",gaussian_configuration)
+    print("gaussian configuration----- -fddffdguuggfffffdddxtttssssxxx------>: ",gaussian_configuration)
     print("factorized configuration------>cccccàsssààcccc->: ",factorized_configuration)
     if args.baseline is False:
         annealing_strategy_bottleneck, annealing_strategy_gaussian =  configure_annealings(factorized_configuration, gaussian_configuration)
     else:
-
         annealing_strategy_bottleneck, annealing_strategy_gaussian =  None, None
 
 
@@ -224,15 +236,14 @@ def main(argv):
     #lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.3, patience=4)
 
 
-    qual = args.quality
 
     aux_net = aux_net_models[ args.aux_net]
     if aux_net is not None:
         #aux_net = aux_net()
         #print("prima di fare l'update abbiamo che: ",aux_net.g_a[0].weight[0])
-        print("Loading", args.pret_checkpoint)           
+        print("Loading", args.pret_checkpoint_base)           
         #checkpoint = torch.load(args.pret_checkpoint, map_location=device)
-        state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
+        state_dict = load_pretrained(torch.load(args.pret_checkpoint_base, map_location=device)['state_dict'])
         aux_net = from_state_dict(aux_net_models["cnn"], state_dict)
         print("DOPO: ",aux_net.g_a[0].weight[0])
         #aux_net = from_state_dict(aux_net,checkpoint["state_dict"])
@@ -249,19 +260,24 @@ def main(argv):
             sos = True
         else: 
             print("qua ci entro se faccio adapter o riprendo il training!!!!")
-
-
             architecture =   models[args.model]
             checkpoint = torch.load(args.path_adapter, map_location=device)
 
             factorized_configuration =checkpoint["factorized_configuration"]
+            gaussian_configuration =  checkpoint["gaussian_configuration"]
             if args.adapt:
                 factorized_configuration["beta"] = 10
                 factorized_configuration["trainable"] = True
-            gaussian_configuration =  checkpoint["gaussian_configuration"]
-            if args.adapt:
+                factorized_configuration["annealing"] = args.fact_annealing
+                factorized_configuration["gap_factor"] = args.fact_gp
+
+
+                
                 gaussian_configuration["beta"] = 10
                 gaussian_configuration["trainable"] = True
+                gaussian_configuration["annealing"] = args.gauss_annealing
+                gaussian_configuration["gap_factor"] = args.gauss_gp
+
             net =architecture(192, 320, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration)
             net = net.to(device)              
             net.update( device = device)
@@ -279,35 +295,6 @@ def main(argv):
             sos = True
 
 
-
-    elif args.model == "cnn_base":
-        print("attn block base method")
-        if args.pret_checkpoint is not None and args.adapt is False: 
-
-            print("entroa qua per la baseline!!!!")
-            #net.update(force = True)
-            #checkpoint = torch.load(args.pret_checkpoint_base, map_location=device)
-            
-            state_dict = load_pretrained(torch.load(args.pret_checkpoint, map_location=device)['state_dict'])
-            net = from_state_dict(aux_net_models["cnn"], state_dict)
-
-            net.update(force = True)
-            net.to(device)
-        else: 
-            net = models[args.model](N = N ,M = M)
-            net.to(device)
-        sos = False
-    elif args.model == "stf": 
-        net = models[args.model](factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration)
-        sos = True
-        if args.pret_checkpoint_stf is not None:
-            checkpoint = torch.load(args.pret_checkpoint_stf, map_location=device)
-            check =checkpoint["state_dict"] # modify_dictionary(checkpoint["state_dict"])
-            print("----------> ",check.keys() )
-            print("prima di fare l'update abbiamo che: ",net.h_a[0].weight[:100])
-            net.load_state_dict(check)
-            print("DOPOOOOOfffOOO---->",net.h_a[0].weight)
-
     elif args.model == "stanh_cnn":
 
         net = models[args.model](N = N, M = M, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration)
@@ -321,8 +308,8 @@ def main(argv):
 
 
     else:
-        net = models[args.model](N = N )
-        sos = True
+        net = models[args.model]( )
+        sos = False
     net = net.to(device)
 
 
@@ -330,11 +317,8 @@ def main(argv):
         net = CustomDataParallel(net)
 
 
-    if "factorized" in args.model:
-        hype = False
-    else:
-        hype = True
-    criterion = RateDistortionLoss(lmbda=args.lmbda, hype = hype)
+
+    criterion = RateDistortionLoss(lmbda=args.lmbda)
     
 
     last_epoch = 0
@@ -343,27 +327,19 @@ def main(argv):
 
     optimizer, aux_optimizer = configure_optimizers(net, args)
     print("hola!")
-    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=35)
+    lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", factor=0.5, patience=50)
 
 
     counter = 0
     best_loss = float("inf")
     epoch_enc = 0
-    
 
 
 
-
-    if args.path_adapter != "" and args.adapt is False: 
-        print("faccio il reload degli adapter!")    
-        #checkpoint = torch.load(args.pret_checkpoint_base, map_location=device)      
-        checkpoint = torch.load(args.path_adapter, map_location=device) 
-        optimizer.load_state_dict(checkpoint["optimizer"] )
-        #aux_optimizer.load_state_dict(checkpoint["aux_optimizer"])
-        lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])   
 
 
     previous_lr = optimizer.param_groups[0]['lr']
+    print("subito i paramteri dovrebbero essere giusti!")
     model_tr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
     model_fr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad== False)
         
@@ -381,10 +357,7 @@ def main(argv):
         net.freeze_net() 
         print("start unfreezing")
         net.unfreeze_quantizer()
-    #net.unfreeze_entropy_model()
-    #net.unfreeze_entropy_parameters()
-    #net.unfreeze_context()
-            
+
 
 
     model_tr_parameters = sum(p.numel() for p in net.parameters() if p.requires_grad)
@@ -413,8 +386,13 @@ def main(argv):
             annealing_strategy_gaussian,
             sos
         )
-        loss = test_epoch(epoch, test_dataloader, net, criterion, sos)
-        lr_scheduler.step(loss)
+
+
+        loss_valid = test_epoch(epoch, valid_dataloader, net, criterion, sos, valid = True)
+
+        loss = test_epoch(epoch, test_dataloader, net, criterion, sos, valid = False)
+
+        lr_scheduler.step(loss_valid)
 
         is_best = loss < best_loss
         best_loss = min(loss, best_loss)
@@ -438,7 +416,7 @@ def main(argv):
 
             filename, filename_best =  create_savepath(args, epoch)
 
-            if (is_best) or epoch%25==0:
+            if (is_best) or epoch%5==0:
                 if sos:
                     save_checkpoint_our(
                             {
@@ -511,15 +489,15 @@ def main(argv):
 
         
         
-        if epoch%20==0:
+        if epoch%2==0:
             print("entro qua")
 
 
             # create filepath 
-            filelist = [os.path.join("/scratch/dataset/kodak", f) for f in os.listdir("/scratch/dataset/kodak")]
+            #filelist = [os.path.join("/scratch/dataset/kodak", f) for f in os.listdir("/scratch/dataset/kodak")]
             net.update()
-            epoch_enc += 1
-            #compress_with_ac(net, filelist, device, epoch_enc, baseline = args.baseline)
+            #epoch_enc += 1
+            #compress_with_ac(net, filelist, device, epoch_enc, baseline = args.baseline) ddddd
             if args.baseline is False and sos: 
                 plot_sos(net, device)
         
@@ -543,7 +521,7 @@ def main(argv):
                     annealing_strategy_gaussian.increase = True
                     print("now the annealing is: ", annealing_strategy_gaussian.increase)
             end = time.time()
-            print("Runtime of the epoch vv ", epoch)
+            print("Runtime of the epoch  ", epoch)
             sec_to_hours(end - start) 
             print("END OF EPOCH ", epoch)
 
@@ -575,7 +553,7 @@ def main(argv):
         
 
 if __name__ == "__main__":
-    wandb.init(project="NeuralADQ_zou22_adapter", entity="albertopresta")   
+    wandb.init(project="NeuralADQ_zou2022_A2_sections", entity="albertopresta")   
     main(sys.argv[1:])
 
 

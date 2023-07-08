@@ -386,13 +386,13 @@ class EntropyBottleneck(EntropyModel):
     def check_out(self, x):
         t = x.size(1)
         x = x[0].reshape(t,-1)
-        print(x.shape)
-        print(self.quantiles.shape)
+        #print(x.shape)
+        #print(self.quantiles.shape)
         for i in range(x.size(0)):
             for j in range(x.size(1)):
                 if x[i][j] < self.quantiles[i][0][0] or x[i][j] > self.quantiles[i][0][2]:
                     print('x:',x[i][j] )
-                    print('q:',self.quantiles[i][0][0],self.quantiles[i][0][2])
+                    #print('q:',self.quantiles[i][0][0],self.quantiles[i][0][2])
 
     def forward(
         self, x: Tensor, training: Optional[bool] = None

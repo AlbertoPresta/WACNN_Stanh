@@ -22,7 +22,7 @@ models = {
     'cnn': WACNNSoS,
     "cnn_base": WACNN,
    "stanh_cnn": WACNNStanh,
-   "stf": SymmetricalTransFormerStanh
+   "stf":SymmetricalTransFormer
 
 }
 

@@ -28,11 +28,10 @@ class ImageFolder(Dataset):
             raise RuntimeError(f'Invalid directory "{root}"')
 
         self.samples =[]# [f for f in splitdir.iterdir() if f.is_file()]
-        if split == "train":
-            num_images = num_images
+
+        num_images = num_images
             
-        else:
-            num_images = 1024
+
         for i,f in enumerate(splitdir.iterdir()):
             if i%10000==0:
                 print(i)
