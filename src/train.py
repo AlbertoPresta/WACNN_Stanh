@@ -68,7 +68,7 @@ def parse_args(argv):
     parser.add_argument("-e","--epochs",default=300,type=int,help="Number of epochs (default: %(default)s)",)
     parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
     parser.add_argument("-n","--num-workers",type=int,default=8,help="Dataloaders threads (default: %(default)s)",)
-    parser.add_argument("--lmbda",type=float,default=0.022, help="Bit-rate distortion parameter (default: %(default)s)",)
+    parser.add_argument("--lmbda",type=float,default=0.011, help="Bit-rate distortion parameter (default: %(default)s)",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)")
     parser.add_argument("--test-batch-size",type=int,default=64,help="Test batch size (default: %(default)s)",)
     parser.add_argument( "--aux-learning-rate", default=1e-3, type=float, help="Auxiliary loss learning rate (default: %(default)s)",)
@@ -193,14 +193,14 @@ def main(argv):
     train_dataset = ImageFolder(args.dataset, split="train", transform=train_transforms, num_images=args.num_images)
     valid_dataset = ImageFolder(args.dataset, split="test", transform=test_transforms, num_images=args.num_images_val)
     test_dataset = TestKodakDataset(data_dir="/scratch/dataset/kodak")
-    device = "cuda" if  torch.cuda.is_available() else "cpu"
+    device = "cuda" 
 
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         shuffle=True,
-        pin_memory=(device == "cuda"),
+
     )
 
     valid_dataloader = DataLoader(
@@ -208,7 +208,7 @@ def main(argv):
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         shuffle=False,
-        pin_memory=(device == "cuda"),
+
     )
 
 

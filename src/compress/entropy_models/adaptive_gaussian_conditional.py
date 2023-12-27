@@ -235,6 +235,9 @@ class HypeEntropyModelSoS(nn.Module):
             output_cdf[i,:] = self.cdf[indexes[i].item(),:]  
         return output_cdf 
 
+
+
+    """
     def compress(self, inputs, indexes):
 
 
@@ -260,7 +263,29 @@ class HypeEntropyModelSoS(nn.Module):
         #    raise ValueError("L'output Gaussiano codificato è diverso, qualcosa non va!")
         #else:
         #    print("l'immagine è ok!")
-        return byte_stream, output_cdf, shape_symbols  
+        return byte_stream, output_cdf, shape_symbols 
+    """
+
+    def compress(self, inputs, indexes):
+
+        symbols = inputs #self.quantize(inputs, "symbols", means)
+
+
+
+
+        strings = []
+        for i in range(symbols.size(0)):
+            rv = self.entropy_coder.encode_with_indexes(
+                symbols[i].reshape(-1).int().tolist(),
+                indexes[i].reshape(-1).int().tolist(),
+                self._quantized_cdf.tolist(),
+                self._cdf_length.reshape(-1).int().tolist(),
+                self._offset.reshape(-1).int().tolist(),
+            )
+            strings.append(rv)
+
+
+        return strings 
 
 
 
@@ -383,16 +408,15 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
         return True
 
 
+
+
+
+
+
     
     def update(self, device = torch.device("cuda")):
 
-        #device = self.sos.cum_w.device
-        #print("***************************************************************************")
-        #print("***************************************************************************")
-        #print("***************************************************************************")
-        #print("***************************************************************************")
-        #print("***************************************************************************")
-        #print("***************************************************************************")
+
         self.sos.update_state(device)
         max_length = self.sos.cum_w.shape[0]
             
@@ -411,7 +435,7 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
         samples = samples.repeat(self.scale_table.shape[0],1)
         samples = samples.to(device)
 
-
+        self._offset = -self.sos.cum_w[0]
 
 
         low,up = self.define_v0_and_v1(samples, average_points, distance_points)
@@ -436,24 +460,16 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
             
         pmf = upper - lower
 
-        # proviamo a fare andare anche il loro entropy coder, se fosse così sarebbe bellissimo 
-        tail_mass = torch.zeros(64,1).to(samples.device)# 2 * lower[:, :1]
-
-        quantized_cdf = torch.Tensor(len(pmf_length), max_length + 2)
-        quantized_cdf = self._pmf_to_cdf(pmf, tail_mass, pmf_length, max_length)
-        self._quantized_cdf = quantized_cdf
-        self._offset =  torch.zeros(samples[:,0].shape).to(samples.device) # valori minimi possibili!
-        #self._offset = self.sos.cum_w[0].item() - 1
-        self._offset = self._offset.int()
-        self._cdf_length = pmf_length + 2
-        #print("shape of lengt is ", self._cdf_length.shape )
-        self._cdf_length = self._cdf_length.squeeze(1)
-        #print("shape of lengt is ", self._cdf_length.shape )
-        #print("finito l'update")
-        ###################################################################################
         self.pmf = pmf
         self.cdf =  self.pmf_to_cdf()
 
+        # loro 
+        tail_mass = 2 * lower[:, :1]
+        quantized_cdf = torch.Tensor(len(pmf_length), max_length + 2)
+        quantized_cdf = self._pmf_to_cdf(pmf, tail_mass, pmf_length, max_length)
+        self._quantized_cdf = quantized_cdf
+        
+        self._cdf_length = pmf_length + 2
 
 
 
@@ -653,8 +669,6 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
             #print("mannaggia a satana io non devo entrare qua!!!")
             x = x.reshape(shape)
             x = x.permute(*perms[1]).contiguous()
-
-        #print("lo shape di x dopo il primo quantiza è: ",x.shape,"    ",indexes.shape)
 
         return super().compress(x, indexes) 
 

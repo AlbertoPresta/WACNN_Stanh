@@ -157,7 +157,7 @@ class EntropyModelSoS(nn.Module):
 
 
      
-    def dequantize(self, inputs, means = None):
+    def dequantize(self, inputs, dtype = torch.float, means = None):
         """
         we have to 
         1 -map again the integer values to the real values for each channel
@@ -175,7 +175,7 @@ class EntropyModelSoS(nn.Module):
         inputs = inputs.reshape(shape_inp)
         if means is not None:
             inputs += means        
-        outputs = inputs.type(torch.float)
+        outputs = inputs.type(dtype)
         #print(" factorized terzo utputs da confrontare: ",torch.unique(outputs[0,:,:], return_counts=True))
         return outputs
 
@@ -192,7 +192,8 @@ class EntropyModelSoS(nn.Module):
         return res
         
         
-
+    """
+    questa è la vecchia implementazione, la tengo nel caso io non riesca ac ombinare con l'altra implementazione
     def compress(self, inputs ):
         symbols = inputs #[1]
         M = symbols.size(1)
@@ -216,15 +217,86 @@ class EntropyModelSoS(nn.Module):
         if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
             raise ValueError("il simbolo codificato è different, qualcosa non va!")
         return byte_stream, output_cdf
+    """
 
 
 
+    def compress(self, symbols, indexes):
+        """
+        Compress input tensors to char strings.
+
+        Args:
+            inputs (torch.Tensor): input tensors
+            indexes (torch.IntTensor): tensors CDF indexes
+            means (torch.Tensor, optional): optional tensor means
+        """
+        
+
+        if len(symbols.size()) < 2:
+            raise ValueError(
+                "Invalid `inputs` size. Expected a tensor with at least 2 dimensions."
+            )
+
+        if symbols.size() != indexes.size():
+            raise ValueError("`inputs` and `indexes` should have the same size.")
+
+
+
+        strings = []
+        for i in range(symbols.size(0)):
+            rv = self.entropy_coder.encode_with_indexes(
+                symbols[i].reshape(-1).int().tolist(),
+                indexes[i].reshape(-1).int().tolist(),
+                self._quantized_cdf.tolist(),
+                self._cdf_length.reshape(-1).int().tolist(),
+                self._offset.reshape(-1).int().tolist(),
+            )
+            strings.append(rv)
+        return strings
+
+
+
+
+
+
+
+
+
+    """
+    tengo la vecchia implementazione che non si sa mai
     def decompress(self, byte_stream, output_cdf):
         output = torchac.decode_float_cdf(output_cdf, byte_stream)#.type(torch.FloatTensor)
         #output = output.to("cuda")
         return output
+    """
 
 
+    def decompress(
+        self,
+        strings: str,
+        indexes: torch.IntTensor,
+        dtype: torch.dtype = torch.float,
+      
+    ):
+
+
+
+        cdf = self._quantized_cdf
+        outputs = cdf.new_empty(indexes.size())
+
+        for i, s in enumerate(strings):
+            values = self.entropy_coder.decode_with_indexes(
+                s,
+                indexes[i].reshape(-1).int().tolist(),
+                cdf.tolist(),
+                self._cdf_length.reshape(-1).int().tolist(),
+                self._offset.reshape(-1).int().tolist(),
+            )
+            outputs[i] = torch.tensor(
+                values, device=outputs.device, dtype=outputs.dtype
+            ).reshape(outputs[i].size())
+        outputs = self.dequantize(outputs,  dtype)
+        return outputs
 
 
 class EntropyBottleneckSoS(EntropyModelSoS):
@@ -415,7 +487,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
 
 
 
-
+    """
     def update(self, device = torch.device("cuda")):
 
         self.sos.update_state(device) 
@@ -450,7 +522,45 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         self.pmf = pmf
         self.cdf = self.pmf_to_cdf()
         return True
+    """
     
+
+    def update(self, device = torch.device("cuda")) -> bool:
+        # Check if we need to update the bottleneck parameters, the offsets are
+        # only computed and stored when the conditonal model is update()'d.
+
+
+        self.sos.update_state(device) 
+        samples = self.sos.cum_w
+        samples = samples.repeat(self.M,1).unsqueeze(1) 
+        samples = samples.to(device)
+
+
+
+
+
+        self._offset = -self.sos.cum_w[0].item()
+
+        pmf_start = self.sos.cum_w[0].item()
+        
+        pmf_length = self.sos.cum_w.shape[0].item()
+        max_length = self.sos.cum_w.shape[0].item()
+
+
+        pmf, lower, upper = self._likelihood(samples, stop_gradient=True)
+        pmf = pmf[:, 0, :]
+        tail_mass = torch.sigmoid(lower[:, 0, :1]) + torch.sigmoid(-upper[:, 0, -1:])
+        print("tail mass should be zero because we limit with stanh: ",tail_mass)
+
+        quantized_cdf = self._pmf_to_cdf(pmf, tail_mass, pmf_length, max_length)
+        self._quantized_cdf = quantized_cdf
+        self._cdf_length = pmf_length + 2
+
+        self.pmf = pmf
+        self.cdf = self.pmf_to_cdf()
+    
+        return True
+
 
 
 
@@ -650,6 +760,15 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         self.sos.b = torch.nn.Parameter(torch.sort(self.sos.b)[0])
     
     
+
+    def define_permutation(self, x):
+        perm = np.arange(len(x.shape)) 
+        perm[0], perm[1] = perm[1], perm[0]
+        inv_perm = np.arange(len(x.shape))[np.argsort(perm)] # perm and inv perm
+        return perm, inv_perm
+
+
+    """
     def compress(self, x, perms):
         perm = perms[0]
         inv_perm = perms[1]
@@ -661,10 +780,37 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         x = x.permute(*inv_perm).contiguous()
 
         return super().compress(x) 
+    """
 
-    def decompress(self, byte_stream, output_cdf):
+
+
+
+
+    def compress(self, x):
+        indexes = self._build_indexes(x.size())
+
+        perm, inv_perm = self.define_permutation(z)
+        x = x.permute(*perm).contiguous()
+        shape = x.size()
+        values = x.reshape(x.size(0), 1, -1) #[192,1,-----]
+        x = self.quantize(values,"symbols") #[1,192,32,48]
+        x = x.reshape(shape)
+        x = x.permute(*inv_perm).contiguous()
+
+        return super().compress(x, indexes) 
+
+
+    """
+    al solito tengo la vecchia implementazione che non si sa mai
+
+        def decompress(self, byte_stream, output_cdf):
         outputs = super().decompress(byte_stream, output_cdf)  
         outputs = self.dequantize(outputs)
         return outputs
 
+    """
 
+    def decompress(self, strings, size):
+        output_size = (len(strings), self._quantized_cdf.size(0), *size)
+        indexes = self._build_indexes(output_size).to(self._quantized_cdf.device)
+        return super().decompress(strings, indexes)

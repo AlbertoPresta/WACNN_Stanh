@@ -77,7 +77,7 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
             aux_loss.backward()
             aux_optimizer.step()
 
-        if i % 100 == 0:
+        if i % 10000 == 0:
             print(
                 f"Train epoch {epoch}: ["
                 f"{i*len(d)}/{len(train_dataloader.dataset)}"
