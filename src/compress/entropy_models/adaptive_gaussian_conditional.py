@@ -237,7 +237,7 @@ class HypeEntropyModelSoS(nn.Module):
 
 
 
-    """
+    
     def compress(self, inputs, indexes):
 
 
@@ -264,9 +264,9 @@ class HypeEntropyModelSoS(nn.Module):
         #else:
         #    print("l'immagine è ok!")
         return byte_stream, output_cdf, shape_symbols 
-    """
+    
 
-    def compress(self, inputs, indexes):
+    def compress_new(self, inputs, indexes):
 
         symbols = inputs #self.quantize(inputs, "symbols", means)
 
@@ -293,9 +293,9 @@ class HypeEntropyModelSoS(nn.Module):
 
     def decompress(self, byte_stream, output_cdf):
         output = torchac.decode_float_cdf(output_cdf, byte_stream)#.type(torch.FloatTensor)
-        print(output.shape)
-        #output = output.to("cuda")
-        #output = self.dequantize(output)
+        print(output.shape,"decomp")
+        output = output.to("cuda")
+        output = self.dequantize(output)
         return output
    
     
@@ -377,8 +377,10 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
         elif self.activation == "delta":
             self.sos = DeltaQuantized(beta,extrema = self.extrema, device = device)
         elif self.activation == "nonlinearstanh": 
+            print("qui???")
             self.sos = NonLinearStanh(beta,self.num_sigmoids, extrema = self.extrema, trainable= trainable)
         elif self.activation == "tanh":
+            print("oppure qua")
             self.sos = SumOfTanh(beta, self.M,self.num_sigmoids, extrema = self.extrema)
         else: 
             raise ValueError(f'insert a valid activation function ')
@@ -470,6 +472,8 @@ class GaussianConditionalSoS(HypeEntropyModelSoS):
         self._quantized_cdf = quantized_cdf
         
         self._cdf_length = pmf_length + 2
+        self._cdf_length = self._cdf_length.ravel()
+        print("---> cdfleng: ",self._cdf_length.shape)
 
 
 

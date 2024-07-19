@@ -48,7 +48,8 @@ image_models = {"zou22-base": aux_net_models["stf"],
 
 
 
-from torch import Tensor
+
+
 
 def rename_key(key):
     """Rename state_deeict key."""
@@ -146,11 +147,11 @@ class TestKodakDataset(Dataset):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
 
-    parser.add_argument("-m","--model",default="fine_grained_second",help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-m","--model",default="3anchorsbis",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-mp","--model_path",default="/scratch/inference/new_models/devil2022/",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-rp","--result_path",default="/scratch/inference/results",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-ip","--image_path",default="/scratch/dataset/kodak",help="Model architecture (default: %(default)s)",)
-    parser.add_argument("-ep","--entropy_estimation",default=False,help="Model architecture (default: %(default)s)",)
+    parser.add_argument("--entropy_estimation", action="store_true", help="Use cuda")
 
 
     args = parser.parse_args(argv)
@@ -234,7 +235,8 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
     for i, name in enumerate(list(dict_model_list.keys())):#dict_model_listload
 
         #"q10" in name or "a10" in name or q8
-        nm = name[4:].split(".")[0] if int(name.split("-")[0][1:]) >= 10 else name[3:].split(".")[0] 
+        print("*************** ",name)
+        nm = "zou22-sos" #"cnn"name[4:].split(".")[0] if int(name.split("-")[0][1:]) >= 10 else name[3:].split(".")[0] 
 
         #nm_sos = nm + "-sos"
         #nm_base = nm + "-base"
@@ -252,11 +254,17 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
         factorized_configuration["trainable"] = True
         gaussian_configuration =  checkpoint["gaussian_configuration"]
         gaussian_configuration["trainable"] = True
-        model =architecture(N = 192, M = 320, factorized_configuration = factorized_configuration, gaussian_configuration = gaussian_configuration)
+        model =architecture(N = 192, 
+                            M = 320, 
+                            factorized_configuration = factorized_configuration, 
+                            gaussian_configuration = gaussian_configuration)
             
         model = model.to(device)
                           
         model.update( device = device)
+
+        print("----> ",checkpoint["state_dict"].keys())
+        checkpoint["state_dict"]["gaussian_conditional._cdf_length"] = checkpoint["state_dict"]["gaussian_conditional._cdf_length"].ravel()
         model.load_state_dict(checkpoint["state_dict"])  
     
         model.entropy_bottleneck.sos.update_state(device = device )
@@ -268,25 +276,46 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
         model.update( device = device)         
         #torch.save({"state_dict": model.state_dict()},"/scratch/inference/baseline_models/zou2022/q1_1905.pth.tar")
         res[name] = { "model": model}
+        print("-------------------")
+        print(model.gaussian_conditional.sos.cum_w)
+
+        print("save stanh in a separate file")
+        state_dict_stanh = {}
+        state_dict_stanh["state_dict"] = {}
+        state_dict_stanh["state_dict"]["gaussian_conditional"] = {}
+        state_dict_stanh["state_dict"]["entropy_bottleneck"] = {}
+
+        state_dict_stanh["state_dict"]["gaussian_conditional"]["w"] = checkpoint["state_dict"]["gaussian_conditional.sos.w"]
+        state_dict_stanh["state_dict"]["gaussian_conditional"]["b"] = checkpoint["state_dict"]["gaussian_conditional.sos.b"]
+        state_dict_stanh["state_dict"]["entropy_bottleneck"]["w"] = checkpoint["state_dict"]["entropy_bottleneck.sos.w"]
+        state_dict_stanh["state_dict"]["entropy_bottleneck"]["b"] = checkpoint["state_dict"]["entropy_bottleneck.sos.b"]
+
+        state_dict_stanh["factorized_configuration"] = checkpoint["factorized_configuration"]
+        state_dict_stanh["gaussian_configuration"] = checkpoint["gaussian_configuration"]
+
+        
+        filename = "/scratch/inference/new_models/devil2022/3_anchors_stanh/" +  name.split("/")[-1].split("-")[0] + "-stanh.pth.tar"
+
+        torch.save(state_dict_stanh, filename)
 
 
     # carico i modelli base
-    base_path = "/scratch/pretrained_models/zou22"
-    base_models = os.listdir(base_path)
+    #base_path = "/scratch/pretrained_models/zou22"
+    #base_models = os.listdir(base_path)
 
-    for bm in base_models:
+    #for bm in base_models:
             
-        qual = int(bm.split("-")[0][1:])
-        if qual in desired_base_quality:
+    #    qual = int(bm.split("-")[0][1:])
+    #    if qual in desired_base_quality:
 
-            pt = os.path.join("/scratch/pretrained_models/zou2022",bm)
-            state_dict = load_pretrained(torch.load(pt, map_location=device))
-            model = from_state_dict(aux_net_models["cnn"], state_dict) #.eval()
-            model.update()
-            model.to(device) 
+    #        pt = os.path.join("/scratch/pretrained_models/zou2022",bm)
+    #        state_dict = load_pretrained(torch.load(pt, map_location=device))
+    #        model = from_state_dict(aux_net_models["cnn"], state_dict) #.eval()
+    #        model.update()
+    #        model.to(device) 
 
-            name = bm.split(".")[0] + "-base"
-            res[name] = { "model": model}
+    #        name = bm.split(".")[0] + "-base"
+    #        res[name] = { "model": model}
 
 
 
@@ -370,6 +399,7 @@ def inference(model, filelist, device, sos,model_name, entropy_estimation = Fals
     i = 0
     for d in filelist:
         name = "image_" + str(i)
+        print(name," ",d," ",i)
         i +=1
         x = read_image(d).to(device)
         x = x.unsqueeze(0) 
@@ -407,7 +437,8 @@ def inference(model, filelist, device, sos,model_name, entropy_estimation = Fals
             else:
                 bpp = sum(len(s[0]) for s in data["strings"]) * 8.0 / num_pixels
             
-            #metrics = compute_metrics(x_padded, out_dec["x_hat"], 255)
+            metrics = compute_metrics(x_padded, out_dec["x_hat"], 255)
+            print("fine immagine: ",bpp," ",metrics)
 
         else:
             out_dec["x_hat"].clamp_(0.,1.)
@@ -416,9 +447,10 @@ def inference(model, filelist, device, sos,model_name, entropy_estimation = Fals
             num_pixels = size[0] * size[2] * size[3]
             bpp = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in out_dec["likelihoods"].values())
             metrics = compute_metrics(x, out_dec["x_hat"], 255)
+            print("fine immagine: ",bpp," ",metrics)
         
         
-        if i <= 25:
+        if i <= -25:
             if sos is False:
 
                 folder_path = "/scratch/inference/images/devil2022/base/" + transl_sos[quality_level] 
@@ -433,15 +465,15 @@ def inference(model, filelist, device, sos,model_name, entropy_estimation = Fals
                 #nome_salv2 = "/scratch/inference/results/images/devil2022/" + name + "original" +  ".png"
                 #imgg.save(nome_salv2)
             else:
-                folder_path = "/scratch/inference/images/devil2022/6anchors/" + transl_sos[quality_level] 
-                if not os.path.exists(folder_path):
-                    os.makedirs(folder_path)
-                    print(f"Cartella '{folder_path}' creata.")
+                print("else")                #folder_path = "/scratch/inference/images/devil2022/6anchors/" + transl_sos[quality_level] 
+                #if not os.path.exists(folder_path):
+                #    os.makedirs(folder_path)
+                #    print(f"Cartella '{folder_path}' creata.")
                 #else:
                 #    print(f"La cartella '{folder_path}' esiste già.")
-                image = transforms.ToPILImage()(out_dec['x_hat'].squeeze())
-                nome_salv = os.path.join(folder_path, name + ".png")#"/scratch/inference/images/devil2022/3anchors" + name +    ".png"
-                image.save(nome_salv)
+                #image = transforms.ToPILImage()(out_dec['x_hat'].squeeze())
+                #nome_salv = os.path.join(folder_path, name + ".png")#"/scratch/inference/images/devil2022/3anchors" + name +    ".png"
+                #image.save(nome_salv)
 
         
 
@@ -501,14 +533,14 @@ def set_seed(seed=123):
     np.random.seed(seed)
 
 @torch.no_grad()
-def eval_models(res, dataloader, device, entropy_estimation, desired_quality = [1,2,3,4,5,6,7,8,9]):
+def eval_models(res, dataloader, device, entropy_estimation, desired_quality = [1,2,3,4,5,6]):
   
     metrics = {}
     models_name = list(res.keys())
     for i, name in enumerate(models_name): #name = q1-bmshj2018-base/fact
         #print("----")
-        print("name: ",name)
-        qual = int(name.split("-")[0][1:])
+        print("name eval: ",name)
+        qual = int(name.split("/")[-1][1])
         model = res[name]["model"]
 
         sos = True if "base" not in name else False
@@ -518,8 +550,9 @@ def eval_models(res, dataloader, device, entropy_estimation, desired_quality = [
         if  sos is True:
                #asos is False
             if qual in desired_quality: # (1,2,3,5,7,8):#in (2,5,6,8,7,1,3,4,9):
+                print("entro nell'inferenza")
                 psnr, mssim, bpp =  inference(model,dataloader,device, sos, name, entropy_estimation= entropy_estimation)
-
+                print("qual ",qual,"psnr ",psnr," ",bpp)
                 metrics[name] = {"bpp": bpp,
                             "mssim": mssim,
                             "psnr": psnr
@@ -606,9 +639,9 @@ def main(argv):
     models_path = join(args.model_path,model_name) # percorso completo per arrivare ai modelli salvati (/scratch/inference/pretrained_models/chegn2020) qua ho salvato i modelli 
  
 
-    models_checkpoint = listdir(models_path) # checkpoints dei modelli  q1-bmshj2018-sos.pth.tar, q2-....
+    models_checkpoint =[models_path + "/q5-zou22.pth.tar",models_path + "/q4-zou22.pth.tar",models_path + "/q3-zou22.pth.tar"]# listdir(models_path) # checkpoints dei modelli  q1-bmshj2018-sos.pth.tar, q2-....
     print(models_checkpoint)
-    device = "cpu"
+    device = "cuda"
     entropy_estimation = args.entropy_estimation
     
     images_path = args.image_path # path del test set 
@@ -620,13 +653,13 @@ def main(argv):
     dict_model_list =  {} #  inizializzo i modelli 
 
 
-    # RICORDARSI DI METTERE I BASE QUANDO ARRIVERA' il MOMENTO!!!!!!
+
     for i, check in enumerate(models_checkpoint):  # per ogni cjeckpoint, salvo il modello nostro con la chiave q1-bmshj2018-sos ed il modello base con la chiave q1-bmshj2018-base (il modello base non ha checkpoint perchè lo prendo online)
         if True: #"q1" in check:
             name = check.split("-")[0] + "-" + check.split("-")[1]  # q1-zou22 
             print("name_sos è il seguente: ",name)
             dict_model_list[name + "-sos"] = check
-            dict_model_list[name + "-base"] = name + "-base"
+            #dict_model_list[name + "-base"] = name + "-base"
             
 
 
@@ -656,5 +689,5 @@ def main(argv):
     
 if __name__ == "__main__":
 
-    wandb.init(project="prova", entity="albertopresta")   
+    wandb.init(project="prova", entity="albipresta")   
     main(sys.argv[1:])

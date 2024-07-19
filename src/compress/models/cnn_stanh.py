@@ -32,12 +32,11 @@ class WACNNSoS(CompressionModel):
                   M=320,
                   factorized_configuration = None, 
                   gaussian_configuration = None,
-                  baseline = False,
                   pretrained_model = None,
                  **kwargs):
         super().__init__(**kwargs)
 
-        self.baseline = baseline
+
 
         self.N = N 
         self.M = M
@@ -328,13 +327,15 @@ class WACNNSoS(CompressionModel):
             "gap":[gap_entropy, gap_gaussian]
         }
 
-    def load_state_dict(self, state_dict):
-        update_registered_buffers(
-            self.gaussian_conditional,
-            "gaussian_conditional",
-            ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
-            state_dict,
-        )
+    def load_state_dict(self, state_dict,gauss_up = True):
+        
+        if gauss_up:
+            update_registered_buffers(
+                self.gaussian_conditional,
+                "gaussian_conditional",
+                ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
+                state_dict,
+            )
         super().load_state_dict(state_dict)
 
     @classmethod
@@ -347,10 +348,22 @@ class WACNNSoS(CompressionModel):
         net.load_state_dict(state_dict)
         return net
 
+    def freeze_net(self):
+        for n,p in self.named_parameters():
+            p.requires_grad = False
+        
+        for p in self.parameters(): 
+            p.requires_grad = False
+
+    def unfreeze_quantizer(self): 
+        for p in self.entropy_bottleneck.sos.parameters(): 
+            p.requires_grad = True
+        for p in self.gaussian_conditional.sos.parameters(): 
+            p.requires_grad = True
 
 
 
-
+    """
     def compress(self,x): 
 
 
@@ -419,10 +432,10 @@ class WACNNSoS(CompressionModel):
         y_strings.append(y_string)
 
         return {"strings": [y_strings, z_strings], "shape": z.size()[-2:], "params": {"means": y_means, "scales": y_scales}}
-
+    
 
             
-    def decompress(self,strings, shape):
+    def decompress_new(self,strings, shape):
         z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
@@ -471,7 +484,7 @@ class WACNNSoS(CompressionModel):
         x_hat = self.g_s(y_hat).clamp_(0, 1)
 
         return {"x_hat": x_hat}
-
+    """
 
 
 
@@ -619,8 +632,8 @@ class WACNNSoS(CompressionModel):
                         self.lrp_transforms[j][i].bias = pretrained_model.lrp_transforms[j][i].bias
                         self.lrp_transforms[j][i].requires_grad = True      
 
-    """
-    def compress_old(self,x): 
+    
+    def compress(self,x): 
 
         y = self.g_a(x)
         y_shape = y.shape[2:]
@@ -653,6 +666,7 @@ class WACNNSoS(CompressionModel):
 
 
         for slice_index, y_slice in enumerate(y_slices):
+            print("slice index: ",slice_index)
             support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
             mean_support = torch.cat([latent_means] + support_slices, dim=1)
             mu = self.cc_mean_transforms[slice_index](mean_support)
@@ -700,7 +714,7 @@ class WACNNSoS(CompressionModel):
 
 
 
-    def decompress_old(self,data):
+    def decompress(self,data):
         strings = data["strings"] 
         cdfs = data["cdfs"]
         shapes = data["shapes"]
@@ -717,6 +731,7 @@ class WACNNSoS(CompressionModel):
         y_hat_slices = []
 
         for slice_index in range(self.num_slices):
+            print("slice index: ",slice_index)
             support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
 
             mean_support = torch.cat([latent_means] + support_slices, dim=1)
@@ -733,7 +748,7 @@ class WACNNSoS(CompressionModel):
 
 
             rv = self.gaussian_conditional.decompress(y_string[slice_index],y_cdf[slice_index]) # decompress -> dequantize  + mu
-            rv = torch.Tensor(rv).reshape(1, -1, y_shape[0], y_shape[1])
+            rv = torch.Tensor(rv).reshape(1, -1, y_shape[0], y_shape[1]).to("cuda")
 
             y_hat_slice = rv + mu
 
@@ -749,7 +764,7 @@ class WACNNSoS(CompressionModel):
 
         return {"x_hat": x_hat}
     
-        """
+        
     
 
 

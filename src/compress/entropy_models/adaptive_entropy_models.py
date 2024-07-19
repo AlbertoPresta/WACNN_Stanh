@@ -192,8 +192,8 @@ class EntropyModelSoS(nn.Module):
         return res
         
         
-    """
-    questa è la vecchia implementazione, la tengo nel caso io non riesca ac ombinare con l'altra implementazione
+    
+    #questa è la vecchia implementazione, la tengo nel caso io non riesca ac ombinare con l'altra implementazione
     def compress(self, inputs ):
         symbols = inputs #[1]
         M = symbols.size(1)
@@ -214,14 +214,14 @@ class EntropyModelSoS(nn.Module):
        
         #print(print("dve essere uguale: ",torch.unique(d[0,:,:], return_counts=True)))
         #print("---->  verifica",d.equal(symbols))
-        if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
-            raise ValueError("il simbolo codificato è different, qualcosa non va!")
+        #if torchac.decode_float_cdf(output_cdf, byte_stream).equal(symbols) is False:
+        #    raise ValueError("il simbolo codificato è different, qualcosa non va!")
         return byte_stream, output_cdf
-    """
+    
 
 
 
-    def compress(self, symbols, indexes):
+    def compress_new(self, symbols, indexes):
         """
         Compress input tensors to char strings.
 
@@ -262,16 +262,16 @@ class EntropyModelSoS(nn.Module):
 
 
 
-    """
-    tengo la vecchia implementazione che non si sa mai
+    
+    #tengo la vecchia implementazione che non si sa mai
     def decompress(self, byte_stream, output_cdf):
         output = torchac.decode_float_cdf(output_cdf, byte_stream)#.type(torch.FloatTensor)
-        #output = output.to("cuda")
+        output = output.to("cuda")
         return output
-    """
+    #"""
 
 
-    def decompress(
+    def decompress_new(
         self,
         strings: str,
         indexes: torch.IntTensor,
@@ -487,7 +487,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
 
 
 
-    """
+    
     def update(self, device = torch.device("cuda")):
 
         self.sos.update_state(device) 
@@ -522,9 +522,9 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         self.pmf = pmf
         self.cdf = self.pmf_to_cdf()
         return True
-    """
     
-
+    
+    """
     def update(self, device = torch.device("cuda")) -> bool:
         # Check if we need to update the bottleneck parameters, the offsets are
         # only computed and stored when the conditonal model is update()'d.
@@ -543,11 +543,11 @@ class EntropyBottleneckSoS(EntropyModelSoS):
 
         pmf_start = self.sos.cum_w[0].item()
         
-        pmf_length = self.sos.cum_w.shape[0].item()
-        max_length = self.sos.cum_w.shape[0].item()
+        pmf_length = self.sos.cum_w.shape[0]#.item()
+        max_length = self.sos.cum_w.shape[0]#.item()
 
 
-        pmf, lower, upper = self._likelihood(samples, stop_gradient=True)
+        pmf, lower, upper = self._likelihood(samples, sp=True)
         pmf = pmf[:, 0, :]
         tail_mass = torch.sigmoid(lower[:, 0, :1]) + torch.sigmoid(-upper[:, 0, -1:])
         print("tail mass should be zero because we limit with stanh: ",tail_mass)
@@ -560,6 +560,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         self.cdf = self.pmf_to_cdf()
     
         return True
+    """
 
 
 
@@ -708,7 +709,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         likelihood = torch.abs(
         torch.sigmoid(sign * upper) - torch.sigmoid(sign * lower))
         
-        return likelihood
+        return likelihood,lower,upper
 
     
 
@@ -737,7 +738,7 @@ class EntropyBottleneckSoS(EntropyModelSoS):
 
 
         if not torch.jit.is_scripting():
-            likelihood = self._likelihood(outputs)
+            likelihood,lower,upper = self._likelihood(outputs)
             if self.use_likelihood_bound:
                 likelihood = self.likelihood_lower_bound(likelihood)
         else:
@@ -768,10 +769,11 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         return perm, inv_perm
 
 
-    """
-    def compress(self, x, perms):
-        perm = perms[0]
-        inv_perm = perms[1]
+    
+    def compress(self, x):
+        perm, inv_perm = self.define_permutation(x)
+        #perm = perms[0]
+        #inv_perm = perms[1]
         x = x.permute(*perm).contiguous()
         shape = x.size()
         values = x.reshape(x.size(0), 1, -1) #[192,1,-----]
@@ -780,13 +782,13 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         x = x.permute(*inv_perm).contiguous()
 
         return super().compress(x) 
+    
+
+
+
+
     """
-
-
-
-
-
-    def compress(self, x):
+    def compress_new(self, x):
         indexes = self._build_indexes(x.size())
 
         perm, inv_perm = self.define_permutation(z)
@@ -798,19 +800,20 @@ class EntropyBottleneckSoS(EntropyModelSoS):
         x = x.permute(*inv_perm).contiguous()
 
         return super().compress(x, indexes) 
-
-
     """
-    al solito tengo la vecchia implementazione che non si sa mai
 
-        def decompress(self, byte_stream, output_cdf):
+    
+    #al solito tengo la vecchia implementazione che non si sa mai
+
+    def decompress(self, byte_stream, output_cdf):
         outputs = super().decompress(byte_stream, output_cdf)  
         outputs = self.dequantize(outputs)
         return outputs
 
+    
     """
-
     def decompress(self, strings, size):
         output_size = (len(strings), self._quantized_cdf.size(0), *size)
         indexes = self._build_indexes(output_size).to(self._quantized_cdf.device)
         return super().decompress(strings, indexes)
+    """
