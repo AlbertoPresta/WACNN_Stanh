@@ -44,23 +44,23 @@ class WACNNMultiSos(WACNNSoS):
 
 
         self.entropy_bottleneck = nn.ModuleList(EntropyBottleneckSoS(N, 
-                                               beta = self.factorized_configuration["beta"], 
-                                                num_sigmoids = self.factorized_configuration["num_sigmoids"], 
-                                                activation = self.factorized_configuration["activation"],
-                                                extrema = self.factorized_configuration["extrema"],
-                                                trainable = self.factorized_configuration["trainable"],
+                                               beta = self.factorized_configuration[i]["beta"], 
+                                                num_sigmoids = self.factorized_configuration[i]["num_sigmoids"], 
+                                                activation = self.factorized_configuration[i]["activation"],
+                                                extrema = self.factorized_configuration[i]["extrema"],
+                                                trainable = self.factorized_configuration[i]["trainable"],
                                                 device = torch.device("cuda") 
-                                                )  for _ in range(self.num_stanh) )
+                                                )  for i in range(self.num_stanh) )
 
         self.gaussian_conditional = nn.ModuleList(GaussianConditionalSoS(None,
                                                             channels = N,
-                                                            beta = self.gaussian_configuration["beta"], 
-                                                            num_sigmoids = self.gaussian_configuration["num_sigmoids"], 
-                                                            activation = self.gaussian_configuration["activation"],
-                                                            extrema = self.gaussian_configuration["extrema"], 
-                                                            trainable =  self.gaussian_configuration["trainable"],
+                                                            beta = self.gaussian_configuration[i]["beta"], 
+                                                            num_sigmoids = self.gaussian_configuration[i]["num_sigmoids"], 
+                                                            activation = self.gaussian_configuration[i]["activation"],
+                                                            extrema = self.gaussian_configuration[i]["extrema"], 
+                                                            trainable =  self.gaussian_configuration[i]["trainable"],
                                                             device = torch.device("cuda")
-                                                            ) for _ in range(self.num_stanh))
+                                                            ) for i in range(self.num_stanh))
         
 
 
@@ -93,20 +93,22 @@ class WACNNMultiSos(WACNNSoS):
         #print("updated entire model")
             
 
-    def load_state_dict(self, state_dict, state_dicts_stanh):
-        for i in range(self.num_stanh):
-            update_registered_buffers(
-                self.gaussian_conditional[i],
-                "gaussian_conditional." + str(i) ,
-                ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
-                state_dict,
-            )
+    def load_state_dict(self, state_dict, state_dicts_stanh = None):
+
+        #for i in range(self.num_stanh):
+        #    update_registered_buffers(
+        #        self.gaussian_conditional[i],
+        #        "gaussian_conditional." + str(i) ,
+        #        ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
+        #        state_dict,
+        #    )
         super().load_state_dict(state_dict, gauss_up = False)
 
-        for i in range(len(state_dicts_stanh)):
-            print("uplad stanh values for index ",i)
-            self.upload_stanh_values(state_dicts_stanh[i]["state_dict"],i)
-    
+        if state_dicts_stanh is not None:
+            for i in range(len(state_dicts_stanh)):
+                print("uplad stanh values for index ",i)
+                self.upload_stanh_values(state_dicts_stanh[i]["state_dict"],i)
+        
 
     def upload_stanh_values(self,state_dict,index):
         assert index < self.num_stanh
@@ -187,9 +189,9 @@ class WACNNMultiSos(WACNNSoS):
 
             perm, inv_perm = self.define_permutation(y)
             if stanh_level == int(stanh_level):
-                self.gaussian_conditional[stanh_level].sos.update_state(x.device) # update state
+                self.gaussian_conditional[int(stanh_level)].sos.update_state(x.device) # update state
 
-                y_hat_slice, y_slice_likelihood = self.gaussian_conditional[stanh_level](y_slice,
+                y_hat_slice, y_slice_likelihood = self.gaussian_conditional[int(stanh_level)](y_slice,
                                                                                       training = training, 
                                                                                       scales = scale, 
                                                                                       means = mu, 
@@ -220,8 +222,8 @@ class WACNNMultiSos(WACNNSoS):
         perm, inv_perm = self.define_permutation(y)
         
         if stanh_level == int(stanh_level):
-            y_gap = self.gaussian_conditional[stanh_level].quantize(y, "training" if training else "dequantize", perms = [perm, inv_perm])                           
-            gap_gaussian =  self.compute_gap(y,  y_gap, True, index = stanh_level,perms =  [perm, inv_perm])
+            y_gap = self.gaussian_conditional[int(stanh_level)].quantize(y, "training" if training else "dequantize", perms = [perm, inv_perm])                           
+            gap_gaussian =  self.compute_gap(y,  y_gap, True, index = int(stanh_level),perms =  [perm, inv_perm])
         else: 
             y_gap = self.gaussian_conditional[math.floor(stanh_level)].quantize(y, "training" if training else "dequantize", perms = [perm, inv_perm])                           
             gap_gaussian =  self.compute_gap(y,  y_gap, True, index = math.floor(stanh_level),perms =  [perm, inv_perm])
@@ -255,11 +257,11 @@ class WACNNMultiSos(WACNNSoS):
         custom_w = first_sos.w*(1-decimal) + second_sos.w*decimal 
         custom_b = first_sos.b*(1-decimal) + second_sos.b*decimal 
 
-        gaussian_cond = self.gaussian_conditional[floor] if decimal <= 0.5 else self.gaussian_conditional[ceil]
+        gaussian_cond = self.gaussian_conditional[floor] if decimal <= 0.5 else self.gaussian_conditional[ceil] #dddd
 
         gaussian_cond.sos.w = torch.nn.Parameter(custom_w)
         gaussian_cond.sos.b  = torch.nn.Parameter(custom_b)
-        gaussian_cond.sos.update_state()
+        gaussian_cond.sos.update_state()#dddd
 
         return gaussian_cond
 

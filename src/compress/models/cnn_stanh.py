@@ -152,21 +152,21 @@ class WACNNSoS(CompressionModel):
 
 
         self.entropy_bottleneck = EntropyBottleneckSoS(N, 
-                                               beta = self.factorized_configuration["beta"], 
-                                                num_sigmoids = self.factorized_configuration["num_sigmoids"], 
-                                                activation = self.factorized_configuration["activation"],
-                                                extrema = self.factorized_configuration["extrema"],
-                                                trainable = self.factorized_configuration["trainable"],
+                                               beta = self.factorized_configuration[0]["beta"], 
+                                                num_sigmoids = self.factorized_configuration[0]["num_sigmoids"], 
+                                                activation = self.factorized_configuration[0]["activation"],
+                                                extrema = self.factorized_configuration[0]["extrema"],
+                                                trainable = self.factorized_configuration[0]["trainable"],
                                                 device = torch.device("cuda") 
                                                 )   
 
         self.gaussian_conditional = GaussianConditionalSoS(None,
                                                             channels = N,
-                                                            beta = self.gaussian_configuration["beta"], 
-                                                            num_sigmoids = self.gaussian_configuration["num_sigmoids"], 
-                                                            activation = self.gaussian_configuration["activation"],
-                                                            extrema = self.gaussian_configuration["extrema"], 
-                                                            trainable =  self.gaussian_configuration["trainable"],
+                                                            beta = self.gaussian_configuration[0]["beta"], 
+                                                            num_sigmoids = self.gaussian_configuration[0]["num_sigmoids"], 
+                                                            activation = self.gaussian_configuration[0]["activation"],
+                                                            extrema = self.gaussian_configuration[0]["extrema"], 
+                                                            trainable =  self.gaussian_configuration[0]["trainable"],
                                                             device = torch.device("cuda")
                                                             )
 

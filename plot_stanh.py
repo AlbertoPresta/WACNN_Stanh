@@ -279,8 +279,8 @@ class NonLinearStanh(nn.Module):
 num_sigmoids = 0
 beta= 20
 beta2 = 0.1
-extrema = 2
-x = torch.arange(-2.5,2.5,0.001)
+extrema = 60
+x = torch.arange(-5.5,5.5,0.01)
 
 
 xx = x.repeat(192,1,1)#.reshape(192,1,1200)
@@ -288,11 +288,11 @@ print(xx.shape)
 #print("---->",x.shape)
 
 
-
-sumt =  NonLinearStanh(beta, 0,extrema = extrema)
-sumt2 =  NonLinearStanh(beta, 0,extrema = extrema, list_random_b=[0.88,-0.55, 0.23, 0.15],list_random_w=[0.65,-0.25, 0.55, 0.17])
-sumt3 = NonLinearStanh(beta, 0,extrema = extrema)
-sumt4 = NonLinearStanh(beta, 0,extrema = extrema)
+nums = int(extrema*4)
+sumt =  NonLinearStanh(beta,nums,extrema = extrema)
+sumt2 =  NonLinearStanh(beta,nums,extrema = extrema, )
+sumt3 = NonLinearStanh(beta, nums,extrema = extrema)
+sumt4 = NonLinearStanh(beta2,nums,extrema = extrema)
 
 sumt3.w = torch.nn.Parameter(sumt2.w) #torch.nn.Parameter((sumt2.w*0.99+ sumt.w*0.01))
 sumt3.b = torch.nn.Parameter((sumt2.b*0.99 + sumt.b*0.01)) #torch.nn.Parameter(sumt2.b) #
@@ -377,7 +377,7 @@ plt.ylabel(r'discrete/soft-quantized latent representation', fontsize = 25)
 plt.yticks(fontsize=25)
 plt.xticks(fontsize=25)
 plt.show()
-plt.savefig("scalini/scalini.pdf", dpi=200, bbox_inches='tight', pad_inches=0.01)
+#plt.savefig("scalini/scalini.pdf", dpi=200, bbox_inches='tight', pad_inches=0.01)
 #plt.savefig()
 
 

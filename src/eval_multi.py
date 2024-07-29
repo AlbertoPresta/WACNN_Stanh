@@ -41,6 +41,99 @@ from datetime import datetime
 from os.path import join 
 import wandb
 import shutil
+import seaborn as sns
+palette = sns.color_palette("tab10")
+import matplotlib.pyplot as plt
+
+def plot_rate_distorsion(bpp_res, psnr_res,epoch, eest = "compression", index_list = [4]):
+
+    chiavi_da_mettere = list(psnr_res.keys())
+    legenda = {}
+    for i,c in enumerate(chiavi_da_mettere):
+        legenda[c] = {}
+        legenda[c]["colore"] = [palette[i],'-']
+        legenda[c]["legends"] = c
+        legenda[c]["symbols"] = ["*"]*300
+        legenda[c]["markersize"] = [5]*300    
+
+    plt.figure(figsize=(12,8)) # fig, axes = plt.subplots(1, 1, figsize=(8, 5))#dddd
+
+    list_names = list(psnr_res.keys())
+
+    minimo_bpp, minimo_psnr = 10000,1000
+    massimo_bpp, massimo_psnr = 0,0
+
+    for _,type_name in enumerate(list_names): 
+
+        bpp = bpp_res[type_name]
+        psnr = psnr_res[type_name]
+        colore = legenda[type_name]["colore"][0]
+        #symbols = legenda[type_name]["symbols"]
+        #markersize = legenda[type_name]["markersize"]
+        leg = legenda[type_name]["legends"]
+
+        bpp = torch.tensor(bpp).cpu()
+        psnr = torch.tensor(psnr).cpu()    
+        plt.plot(bpp,psnr,"-" ,color = colore, label =  leg ,markersize=10)       
+        plt.plot(bpp, psnr, marker="s", markersize=4, color =  colore)
+
+
+        if "proposed" in type_name:
+            for jjj in index_list:
+                plt.plot(bpp[jjj], psnr[jjj], marker="*", markersize=12, color =  colore)
+                plt.plot(bpp[jjj], psnr[jjj], marker="*", markersize=12, color =  colore)
+                plt.plot(bpp[jjj], psnr[jjj], marker="*", markersize=12, color =  colore) #fff
+
+            #for jjj in [9,18]:
+            #    plt.plot(bpp[jjj], psnr[jjj], marker="o", markersize=6, color =  colore)
+            #    plt.plot(bpp[jjj], psnr[jjj], marker="o", markersize=6, color =  colore)
+            #    plt.plot(bpp[jjj], psnr[jjj], marker="o", markersize=6, color =  colore) #fff
+
+
+
+        for j in range(len(bpp)):
+            if bpp[j] < minimo_bpp:
+                minimo_bpp = bpp[j]
+            if bpp[j] > massimo_bpp:
+                massimo_bpp = bpp[j]
+            
+            if psnr[j] < minimo_psnr:
+                minimo_psnr = psnr[j]
+            if psnr[j] > massimo_psnr:
+                massimo_psnr = psnr[j]
+
+    minimo_psnr = int(minimo_psnr)
+    massimo_psnr = int(massimo_psnr)
+    psnr_tick =  [round(x) for x in range(minimo_psnr, massimo_psnr + 2)]
+    plt.ylabel('PSNR', fontsize = 30)
+    plt.yticks(psnr_tick)
+
+    #print(minimo_bpp,"  ",massimo_bpp)
+
+    bpp_tick =   [round(x)/10 for x in range(int(minimo_bpp*10), int(massimo_bpp*10 + 2))]
+    plt.xticks(bpp_tick)
+    plt.xlabel('Bit-rate [bpp]', fontsize = 30)
+    plt.yticks(fontsize=27)
+    plt.xticks(fontsize=27)
+    plt.grid()
+
+    plt.legend(loc='lower right', fontsize = 25)
+
+
+
+
+
+
+    plt.grid(True)
+    if eest == "model":
+        wandb.log({"model":epoch,
+              "model/rate distorsion trade-off": wandb.Image(plt)})
+    else:  
+        wandb.log({"compression":epoch,
+              "compression/rate distorsion trade-off": wandb.Image(plt)})       
+    plt.close()  
+    print("FINITO")
+
 
 
 class RateDistortionLoss(nn.Module):
@@ -117,6 +210,7 @@ def parse_args(argv):
     parser.add_argument("-rp","--result_path",default="/scratch/inference/results",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-ip","--image_path",default="/scratch/dataset/kodak",help="Model architecture (default: %(default)s)",)
     parser.add_argument("--entropy_estimation", action="store_true", help="Use cuda")
+    parser.add_argument("--pretrained_stanh", action="store_true", help="Use cuda")
     parser.add_argument("--clip_max_norm",default=1.0,type=float,help="gradient clipping max norm (default: %(default)s",)
 
     parser.add_argument("--only_dist", action="store_true", help="Use cuda")
@@ -132,7 +226,7 @@ def parse_args(argv):
     parser.add_argument("--fact_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     parser.add_argument("--gauss_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     
-    parser.add_argument("--num_stanh", type=int, default=6, help="Batch size (default: %(default)s)")
+    parser.add_argument("--num_stanh", type=int, default=4, help="Batch size (default: %(default)s)")
     parser.add_argument("--training_focus",default="stanh_levels",type=str,help="factorized_annealing",)
 
     args = parser.parse_args(argv) ###s
@@ -149,6 +243,7 @@ def update_checkpopoint(state_dict,num_stanh):
 
     for k,v in state_dict.items():
         if "gaussian_conditional" in k:
+            continue
             for j in range(num_stanh):
                 adding = str(j) 
                 new_text = k.replace("gaussian_conditional.", "gaussian_conditional." + adding + ".")
@@ -265,12 +360,12 @@ def evaluation(model,filelist,entropy_estimation,device,epoch = -10, custom_leve
                 size = out_dec['x_hat'].size()
                 num_pixels = size[0] * size[2] * size[3]
                 bpp = sum((torch.log(likelihoods).sum() / (-math.log(2) * num_pixels)) for likelihoods in out_dec["likelihoods"].values())
-                metrics = compute_metrics(x, out_dec["x_hat"], 255)
+                metrics = compute_metrics(x, out_dec["x_hat"], 255)#ddddd
                 #print("fine immagine: ",bpp," ",metrics)
             
 
             
-            bpps[cont].update(bpp)
+            bpps[cont].update(bpp.item())
             psnr[cont].update(metrics["psnr"]) #fff
 
 
@@ -344,17 +439,38 @@ def main(argv):
     gaussian_configuration["annealing"] = args.gauss_annealing
     gaussian_configuration["gap_factor"] = args.gauss_gp
 
-    
+    if args.pretrained_stanh:
 
-    print("entro qua!!!!")
-    stanh_checkpoints_p = [args.stanh_path + "/anchors/a2-stanh.pth.tar",args.stanh_path + "/derivations/q4-a2-stanh.pth.tar",
-                         args.stanh_path + "/derivations/q3-a2-stanh.pth.tar"]
-    
+        print("entro qua!!!!")
+        stanh_checkpoints_p = [args.stanh_path + "/anchors/a2-stanh.pth.tar",args.stanh_path + "/derivations/q4-a2-stanh.pth.tar",
+                            args.stanh_path + "/derivations/q3-a2-stanh.pth.tar"]
 
-    stanh_checkpoints = []
+        stanh_checkpoints = []        
+        for p in stanh_checkpoints_p:
+            stanh_checkpoints.append(torch.load(p, map_location=device))
+    else:
+        stanh_checkpoints_p = args.stanh_path + "/anchors/a2-stanh.pth.tar"
+        stanh_checkpoints = []
 
-    for p in stanh_checkpoints_p:
-        stanh_checkpoints.append(torch.load(p, map_location=device))
+        
+
+
+        #cc = torch.load(stanh_checkpoints_p)
+        #print("cc---------------------- ",cc["gaussian_configuration"])
+        factorized_configuration = []
+        gaussian_configuration = []
+        for jj in [0.5,1,1.5,0,2.5,3,3.5,4]:#range(args.num_stanh):
+            d = torch.load(stanh_checkpoints_p, map_location=device) 
+            d["gaussian_configuration"]["num_sigmoids"] = int(d["gaussian_configuration"]["extrema"]*jj)
+            print("--------------------------------")
+            print(d["gaussian_configuration"])
+            stanh_checkpoints.append(d)
+
+            factorized_configuration.append(d["factorized_configuration"])
+            gaussian_configuration.append(d["gaussian_configuration"])
+            print("DONE")
+
+
 
 
 
@@ -367,7 +483,7 @@ def main(argv):
                             M = 320, 
                             num_stanh = args.num_stanh,
                             factorized_configuration = factorized_configuration, 
-                            gaussian_configuration = gaussian_configuration)
+                            gaussian_configuration = gaussian_configuration)#ddd
             
 
     model = model.to(device)
@@ -375,7 +491,8 @@ def main(argv):
 
     ########### LOADING EVERYTHING ELSE!
     checkpoint["state_dict"] = update_checkpopoint(checkpoint["state_dict"],num_stanh = args.num_stanh)
-    model.load_state_dict(checkpoint["state_dict"],stanh_checkpoints)
+    model.load_state_dict(checkpoint["state_dict"],state_dicts_stanh = None)#stanh_checkpoints
+
 
 
     images_path = args.image_path # path del test set 
@@ -383,9 +500,43 @@ def main(argv):
     image_list = [os.path.join(images_path,f) for f in listdir(images_path)]
     
     model.freeze_net()
-    custom_levels = [0,0.5,1,1.5,2]
-    bpp_init, psnr_init = evaluation(model,image_list,entropy_estimation = args.entropy_estimation,device = device, epoch = -10, custom_levels=custom_levels)
+
+
+
+    adding_levels = [0.0005,0.00075,0.001,0.0011,0.00115,0.0012,0.00125,0.0014]
+    start_levels = [0,1,2,3,4,5,6,7]
+    custom_levels = []#[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.010,0.1,1,1.001,1.1,2]
+
+
+    for i in start_levels:
+        custom_levels.append(i)
+        #for j in adding_levels:
+        #    custom_levels.append(i + j)
+    
+    #custom_levels.append(2)
+    
+
+    print(custom_levels)
+    bpp_, psnr_ = evaluation(model,image_list,entropy_estimation = args.entropy_estimation,device = device, epoch = -10, custom_levels=custom_levels)
     print("DONE") #dddd
+
+
+    psnr_res = {}
+    bpp_res = {}
+
+    bpp_res["gain"] = [0.23839285714285716,  0.3410714285714286, 0.47410714285714284]
+    psnr_res["gain"] = [ 30.805755395683455,  32.34532374100719, 33.94244604316547]
+
+    bpp_res["manual"] = bpp_
+    psnr_res["manual"] = psnr_
+
+
+
+
+    bpp_res["proposed"] = [0.2432186234817814, 0.2595141700404858, 0.29281376518218627, 0.33461538461538465, 0.4012145748987854, 0.4706477732793522, 0.5918016194331983, 0.6506072874493927, 0.7802631578947368]
+    psnr_res["proposed"] = [30.70534351145038, 31.33587786259542, 31.91297709923664, 32.62900763358779, 33.56946564885496, 34.210687022900764, 34.894656488549614, 35.14045801526718, 35.4824427480916]
+
+    plot_rate_distorsion(bpp_res, psnr_res,0, eest="compression")
 
 
 if __name__ == "__main__":
