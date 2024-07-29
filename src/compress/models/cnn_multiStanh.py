@@ -122,13 +122,20 @@ class WACNNMultiSos(WACNNSoS):
 
     def unfreeze_quantizer(self,indexes = None): 
 
-        indexes = self.num_stanh if indexes is None else indexes
 
-        for i in range(self.num_stanh):
-            for p in self.entropy_bottleneck[i].sos.parameters(): 
-                p.requires_grad = True
-            for p in self.gaussian_conditional[i].sos.parameters(): 
-                p.requires_grad = True
+
+        if indexes is None:
+            for i in range(self.num_stanh):
+                for p in self.entropy_bottleneck[i].sos.parameters(): 
+                    p.requires_grad = True
+                for p in self.gaussian_conditional[i].sos.parameters(): 
+                    p.requires_grad = True
+        else:
+            for i in indexes:
+                #for p in self.entropy_bottleneck[i].sos.parameters(): 
+                #    p.requires_grad = True
+                for p in self.gaussian_conditional[i].sos.parameters(): 
+                    p.requires_grad = True           
 
 
     def unfreeze_decoder(self):
@@ -140,19 +147,20 @@ class WACNNMultiSos(WACNNSoS):
 
 
 
-    def forward(self, x, stanh_level = 0, training = True):
+    def forward(self, x,
+                 stanh_level = 0, 
+                 training = True):
 
 
-        self.entropy_bottleneck[stanh_level].sos.update_state(x.device)  # update state        
-        self.gaussian_conditional[stanh_level].sos.update_state(x.device) # update state
-
+        self.entropy_bottleneck[math.floor(stanh_level)].sos.update_state(x.device)  # update state        
+        
         y = self.g_a(x)
         y_shape = y.shape[2:]
         z = self.h_a(y)
         perm, inv_perm = self.define_permutation(z)
-        z_hat, z_likelihoods = self.entropy_bottleneck[stanh_level](z, [perm,inv_perm], training = training)
+        z_hat, z_likelihoods = self.entropy_bottleneck[math.floor(stanh_level)](z, [perm,inv_perm], training = training)
 
-        gap_entropy = 0 #self.compute_gap(z, z_hat,False, index = stanh_level, perms = [perm, inv_perm])
+        gap_entropy = self.compute_gap(z, z_hat,False, index =math.floor(stanh_level), perms = [perm, inv_perm])
 
 
         latent_scales = self.h_scale_s(z_hat)
@@ -178,11 +186,25 @@ class WACNNMultiSos(WACNNSoS):
 
 
             perm, inv_perm = self.define_permutation(y)
-            y_hat_slice, y_slice_likelihood = self.gaussian_conditional[stanh_level](y_slice,
+            if stanh_level == int(stanh_level):
+                self.gaussian_conditional[stanh_level].sos.update_state(x.device) # update state
+
+                y_hat_slice, y_slice_likelihood = self.gaussian_conditional[stanh_level](y_slice,
                                                                                       training = training, 
                                                                                       scales = scale, 
                                                                                       means = mu, 
                                                                                       perms = [perm, inv_perm])
+            else:
+                floor, ceil, decimal = self.get_floor_ceil_decimal(stanh_level)
+                gauss_conditional_middle = self.define_gaussian_conditional(floor, ceil,decimal)
+
+                y_hat_slice, y_slice_likelihood = gauss_conditional_middle(y_slice,
+                                                                           training = training, 
+                                                                           scales = scale,
+                                                                           means = mu,
+                                                                           perms = [perm, inv_perm])
+                
+                
             y_likelihood.append(y_slice_likelihood)
 
             #y_hat_slice = self.gaussian_conditional.quantize(y_slice,mode = "dequantize",means = mu, perms = [perm, inv_perm]) # sos(y -mu, -1) + mu
@@ -195,9 +217,14 @@ class WACNNMultiSos(WACNNSoS):
 
             y_hat_slices.append(y_hat_slice)
 
-        #perm, inv_perm = self.define_permutation(y)
-        #y_gap = self.gaussian_conditional[stanh_level].quantize(y, "training" if training else "dequantize", perms = [perm, inv_perm])
-        gap_gaussian = 0# self.compute_gap(y,  y_gap, True, index = stanh_level,perms =  [perm, inv_perm])
+        perm, inv_perm = self.define_permutation(y)
+        
+        if stanh_level == int(stanh_level):
+            y_gap = self.gaussian_conditional[stanh_level].quantize(y, "training" if training else "dequantize", perms = [perm, inv_perm])                           
+            gap_gaussian =  self.compute_gap(y,  y_gap, True, index = stanh_level,perms =  [perm, inv_perm])
+        else: 
+            y_gap = self.gaussian_conditional[math.floor(stanh_level)].quantize(y, "training" if training else "dequantize", perms = [perm, inv_perm])                           
+            gap_gaussian =  self.compute_gap(y,  y_gap, True, index = math.floor(stanh_level),perms =  [perm, inv_perm])
 
 
 
@@ -210,6 +237,33 @@ class WACNNMultiSos(WACNNSoS):
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
             "gap":[gap_entropy, gap_gaussian]
         }
+
+
+    def get_floor_ceil_decimal(self,num):
+        floor_num = math.floor(num)
+        ceil_num = math.ceil(num)
+        decimal_part = num - floor_num
+        return floor_num, ceil_num, decimal_part
+    
+
+
+    def define_gaussian_conditional(self,floor,ceil,decimal):
+
+        first_sos = self.gaussian_conditional[floor].sos
+        second_sos = self.gaussian_conditional[ceil].sos 
+
+        custom_w = first_sos.w*(1-decimal) + second_sos.w*decimal 
+        custom_b = first_sos.b*(1-decimal) + second_sos.b*decimal 
+
+        gaussian_cond = self.gaussian_conditional[floor] if decimal <= 0.5 else self.gaussian_conditional[ceil]
+
+        gaussian_cond.sos.w = torch.nn.Parameter(custom_w)
+        gaussian_cond.sos.b  = torch.nn.Parameter(custom_b)
+        gaussian_cond.sos.update_state()
+
+        return gaussian_cond
+
+
 
 
 
@@ -261,7 +315,7 @@ class WACNNMultiSos(WACNNSoS):
             perm, inv_perm = self.define_permutation(y_slice)
 
 
-            strings, cdfs, shapes_symb = self.gaussian_conditiona[stanh_level].compress(y_slice, index,  [perm, inv_perm], means = mu) # shape is flattenend ( in theory)
+            strings, cdfs, shapes_symb = self.gaussian_conditional[stanh_level].compress(y_slice, index,  [perm, inv_perm], means = mu) # shape is flattenend ( in theory)
 
 
             y_q_slice = self.gaussian_conditional[stanh_level].quantize(y_slice, mode = "symbols", means = mu, perms = [perm,inv_perm]) #questo va codificato!!!
@@ -343,3 +397,7 @@ class WACNNMultiSos(WACNNSoS):
         x_hat = self.g_s(y_hat).clamp_(0, 1)
 
         return {"x_hat": x_hat}
+    
+
+
+

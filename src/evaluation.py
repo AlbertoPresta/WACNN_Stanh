@@ -276,8 +276,8 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
         model.update( device = device)         
         #torch.save({"state_dict": model.state_dict()},"/scratch/inference/baseline_models/zou2022/q1_1905.pth.tar")
         res[name] = { "model": model}
-        print("-------------------")
-        print(model.gaussian_conditional.sos.cum_w)
+        print("------------------- ",name)
+        print(model.gaussian_conditional.sos.w.shape)
 
         print("save stanh in a separate file")
         state_dict_stanh = {}
@@ -294,7 +294,7 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
         state_dict_stanh["gaussian_configuration"] = checkpoint["gaussian_configuration"]
 
         
-        filename = "/scratch/inference/new_models/devil2022/3_anchors_stanh/" +  name.split("/")[-1].split("-")[0] + "-stanh.pth.tar"
+        filename = "/scratch/inference/new_models/devil2022/3_anchors_stanh/stanh/" +  name.split("/")[-1].split("-")[0] + "-stanh.pth.tar"
 
         torch.save(state_dict_stanh, filename)
 
@@ -545,28 +545,16 @@ def eval_models(res, dataloader, device, entropy_estimation, desired_quality = [
 
         sos = True if "base" not in name else False
 
-        #if qual <= 6 and "base" not in name:
-        #if "base" not in name or qual > 6:
-        if  sos is True:
-               #asos is False
-            if qual in desired_quality: # (1,2,3,5,7,8):#in (2,5,6,8,7,1,3,4,9):
-                print("entro nell'inferenza")
-                psnr, mssim, bpp =  inference(model,dataloader,device, sos, name, entropy_estimation= entropy_estimation)
-                print("qual ",qual,"psnr ",psnr," ",bpp)
-                metrics[name] = {"bpp": bpp,
-                            "mssim": mssim,
-                            "psnr": psnr
-                                } 
-            #else:          
-            #    print("non considero questo modello ",sos,"   ",qual)
-        else:
-            #if qual <  30: 
-            psnr, mssim, bpp = inference(model,dataloader,device, sos, name,  entropy_estimation= entropy_estimation)
 
+        if qual in desired_quality: # (1,2,3,5,7,8):#in (2,5,6,8,7,1,3,4,9):
+            print("entro nell'inferenza")
+            psnr, mssim, bpp =  inference(model,dataloader,device, sos, name, entropy_estimation= entropy_estimation)
+            print("qual ",qual,"psnr ",psnr," ",bpp)
             metrics[name] = {"bpp": bpp,
                             "mssim": mssim,
                             "psnr": psnr
-                                }
+                                } 
+
     return metrics   
 
 def from_state_dict(cls, state_dict):
@@ -639,7 +627,7 @@ def main(argv):
     models_path = join(args.model_path,model_name) # percorso completo per arrivare ai modelli salvati (/scratch/inference/pretrained_models/chegn2020) qua ho salvato i modelli 
  
 
-    models_checkpoint =[models_path + "/q5-zou22.pth.tar",models_path + "/q4-zou22.pth.tar",models_path + "/q3-zou22.pth.tar"]# listdir(models_path) # checkpoints dei modelli  q1-bmshj2018-sos.pth.tar, q2-....
+    models_checkpoint =[models_path + "anchors/a2-zou22.pth.tar",models_path + "/q4-zou22.pth.tar",models_path + "/q3-zou22.pth.tar"]# listdir(models_path) # checkpoints dei modelli  q1-bmshj2018-sos.pth.tar, q2-....
     print(models_checkpoint)
     device = "cuda"
     entropy_estimation = args.entropy_estimation

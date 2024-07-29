@@ -152,7 +152,12 @@ class SumOfTanh(nn.Module):
 
 
 class NonLinearStanh(nn.Module):
-    def __init__(self, beta,  num_sigmoids,  extrema = 5, trainable =True):
+    def __init__(self, beta,
+                num_sigmoids, 
+                extrema = 5,
+                custom_w = None,
+                custom_b = None,
+                trainable =True):
         super(NonLinearStanh, self).__init__()
         #print("non-linear-sum")
         self.num_sigmoids = int(num_sigmoids)
@@ -169,17 +174,26 @@ class NonLinearStanh(nn.Module):
         
         else:
             self.levels = extrema*2 + 1 
+
+
         # bias 
         if self.num_sigmoids == 0:
-            self.b = torch.nn.Parameter(self.range_num.type(torch.FloatTensor), requires_grad= trainable) # quantizzazione allenabile (ha senso)?
+            if custom_b is None:
+                self.b = torch.nn.Parameter(self.range_num.type(torch.FloatTensor), requires_grad= trainable)
+            else:
+                self.b = torch.nn.Parameter(custom_b, requires_grad= trainable)
+
         else:
-                #self.b = torch.nn.Parameter(torch.FloatTensor(num_sigmoids).normal_().sort()[0]) # punti a caso
+               
             c = len(self.range_num)/self.num_sigmoids
             self.b = torch.nn.Parameter(torch.arange(self.minimo + self.jump/2   ,self.massimo + self.jump/2 , c))
 
-
+        # w
         if self.num_sigmoids == 0:
-            self.w = torch.nn.Parameter(torch.ones(len(self.range_num)), requires_grad= trainable )
+            if custom_w is None:
+                self.w = torch.nn.Parameter(torch.ones(len(self.range_num)), requires_grad= trainable )
+            else:
+                self.w = torch.nn.Parameter(custom_w,requires_grad= trainable)
         else:
             self.w = torch.nn.Parameter(torch.zeros(self.num_sigmoids) + self.jump  )      
 

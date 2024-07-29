@@ -373,4 +373,9 @@ def configure_annealings(factorized_configuration, gaussian_configuration):
                                     type = gaussian_configuration["annealing"]) 
     
 
+    #print("********************* CONFIGURED ANNEALINGS *****************************")
+    #print("*****************************************************************")
+    #print(annealing_strategy_bottleneck)
+    #print("-----")
+    #print(annealing_strategy_gaussian)
     return annealing_strategy_bottleneck, annealing_strategy_gaussian

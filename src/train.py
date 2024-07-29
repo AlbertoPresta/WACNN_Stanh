@@ -165,6 +165,14 @@ def load_pretrained(state_dict):
     return state_dict
 
 
+def sec_to_hours(seconds):
+    a=str(seconds//3600)
+    b=str((seconds%3600)//60)
+    c=str((seconds%3600)%60)
+    d=["{} hours {} mins {} seconds".format(a, b, c)]
+    print(d[0])
+
+
 def modify_dictionary(check):
     res = {}
     ks = list(check.keys())
