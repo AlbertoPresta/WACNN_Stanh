@@ -161,8 +161,8 @@ class WACNN(CompressionModelBaseline):
         z_offset = self.entropy_bottleneck._get_medians()
         z_tmp = z - z_offset
         z_hat = ste_round(z_tmp) + z_offset
-        print("*****************************************************")
-        print("massimo e minimodi z_hat: ",torch.max(z_hat),"  ",torch.min(z_hat),"    ",torch.max(z_offset),"   ",torch.min(z_offset))
+        #print("*****************************************************")
+        #print("massimo e minimodi z_hat: ",torch.max(z_hat),"  ",torch.min(z_hat),"    ",torch.max(z_offset),"   ",torch.min(z_offset))
 
         latent_scales = self.h_scale_s(z_hat)
         latent_means = self.h_mean_s(z_hat)
@@ -197,22 +197,24 @@ class WACNN(CompressionModelBaseline):
         x_hat = self.g_s(y_hat)
 
 
-        print("*****************************************************")
-        print("massimo e minimo di y_hat: ",torch.max(y_hat),"  ",torch.min(y_hat))
+        #print("*****************************************************")
+        #print("massimo e minimo di y_hat: ",torch.max(y_hat),"  ",torch.min(y_hat))
 
         return {
             "x_hat": x_hat,
             "likelihoods": {"y": y_likelihoods, "z": z_likelihoods},
         }
 
-    def load_state_dict(self, state_dict):
-        update_registered_buffers(
-            self.gaussian_conditional,
-            "gaussian_conditional",
-            ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
-            state_dict,
-        )
-        super().load_state_dict(state_dict)
+    def load_state_dict(self, state_dict, gauss_up = True, strict = True ):
+        
+        if gauss_up:
+            update_registered_buffers(
+                self.gaussian_conditional,
+                "gaussian_conditional",
+                ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
+                state_dict,
+            )
+        super().load_state_dict(state_dict, strict = strict)
 
     @classmethod
     def from_state_dict(cls, state_dict):

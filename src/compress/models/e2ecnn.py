@@ -1,13 +1,18 @@
 import math
 import torch
 import torch.nn as nn
-import numpy as np
 
-from compress.entropy_models import  EntropyBottleneckSoS, GaussianConditionalSoS
-
-from .utils import  update_registered_buffers
+from compressai.ans import BufferedRansEncoder, RansDecoder
+from compress.entropy_models import EntropyBottleneck, GaussianConditional
+from compress.layers import GDN
+from .utils import conv, deconv, update_registered_buffers
+from compress.ops import ste_round
+from compress.layers import conv3x3, subpel_conv3x3, Win_noShift_Attention
+from .base import CompressionModel, CompressionModelBase, CompressionModelBaseline
+#from compress.entropy_models.adaptive_gaussian_conditional import GaussianConditionalSoS
+#from compress.entropy_models.adaptive_entropy_models import EntropyBottleneckSoS
 import torch.nn.functional as F
-from .cnn_stanh import WACNNSoS
+from .cnn import WACNN
 # From Balle's tensorflow compression examples
 SCALES_MIN = 0.11
 SCALES_MAX = 256
@@ -19,31 +24,27 @@ def get_scale_table(min=SCALES_MIN, max=SCALES_MAX, levels=SCALES_LEVELS):
 
 
 
-class WACNNMultiSos(WACNNSoS):
+from compress.entropy_models import  EntropyBottleneckSoS, GaussianConditionalSoS
+class WACNNMultiStanH(WACNN):
     """CNN based model"""
 
     def __init__(self,
-                 num_stanh = 3,
+                 num_stanh = 4,
                   N=192,
                   M=320,
                   factorized_configuration = None, 
                   gaussian_configuration = None,
-                  pretrained_model = None,
+
                  **kwargs):
+
+
         super().__init__(N = N,
-                          M = M,
-                            factorized_configuration=factorized_configuration,
-                            gaussian_configuration=gaussian_configuration,
-                            pretrained_model=pretrained_model,
-                            multi = True,
-                            **kwargs)
-
-
+                        M = M,
+                         **kwargs)
+        
         self.num_stanh = num_stanh
-
-
-
-
+        self.factorized_configuration = factorized_configuration 
+        self.gaussian_configuration = gaussian_configuration
         self.entropy_bottleneck = nn.ModuleList(EntropyBottleneckSoS(N, 
                                                beta = self.factorized_configuration[i]["beta"], 
                                                 num_sigmoids = self.factorized_configuration[i]["num_sigmoids"], 
@@ -92,9 +93,11 @@ class WACNNMultiSos(WACNNSoS):
             self.gaussian_conditional[i].update_scale_table(scale_table)
             self.gaussian_conditional[i].update(device = device)
         #print("updated entire model")
-            
 
-    def load_state_dict(self, state_dict, state_dicts_stanh = None):
+
+
+
+    def load_state_dict(self, state_dict, state_dicts_stanh = None, strict = False):
 
         #for i in range(self.num_stanh):
         #    update_registered_buffers(
@@ -103,7 +106,7 @@ class WACNNMultiSos(WACNNSoS):
         #        ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
         #        state_dict,
         #    )
-        super().load_state_dict(state_dict, gauss_up = False)
+        super().load_state_dict(state_dict, gauss_up = False, strict = strict)
 
         if state_dicts_stanh is not None:
             for i in range(len(state_dicts_stanh)):
@@ -121,6 +124,8 @@ class WACNNMultiSos(WACNNSoS):
 
         self.gaussian_conditional[index].sos.update_state()
         self.entropy_bottleneck[index].sos.update_state()
+
+
 
 
     def unfreeze_quantizer(self,unfreeze_fact = False,indexes = None): 
@@ -268,142 +273,6 @@ class WACNNMultiSos(WACNNSoS):
         gaussian_cond.sos.update_state()#dddd
 
         return gaussian_cond
-
-
-
-
-
-
-    def compress(self,x,stanh_level = 0): 
-
-        y = self.g_a(x)
-        y_shape = y.shape[2:]
-        #print("Y SHAPE------> ",y_shape)
-
-        z = self.h_a(y)
-    
-        #al solito, tengo il vecchio modo perché non si sa mai
-        z_strings, entropy_bottleneck_cdf = self.entropy_bottleneck[stanh_level].compress(z)
-        z_hat = self.entropy_bottleneck[stanh_level].decompress( z_strings, entropy_bottleneck_cdf)  
-
-        
-
-
-
-        latent_scales = self.h_scale_s(z_hat)
-        latent_means = self.h_mean_s(z_hat)
-
-
-        
-
-        y_slices = y.chunk(self.num_slices, 1)
-        y_hat_slices = []
-        y_cdfs = []
-        y_shapes = []
-
-        y_scales =  []
-        y_means = []
-        y_strings = []
-
-
-        for slice_index, y_slice in enumerate(y_slices):
-            print("slice index: ",slice_index)
-            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
-            mean_support = torch.cat([latent_means] + support_slices, dim=1)
-            mu = self.cc_mean_transforms[slice_index](mean_support)
-            mu = mu[:, :, :y_shape[0], :y_shape[1]]
-
-            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-            scale = self.cc_scale_transforms[slice_index](scale_support)
-            scale = scale[:, :, :y_shape[0], :y_shape[1]]
-
-            index = self.gaussian_conditional.build_indexes(scale)
-            perm, inv_perm = self.define_permutation(y_slice)
-
-
-            strings, cdfs, shapes_symb = self.gaussian_conditional[stanh_level].compress(y_slice, index,  [perm, inv_perm], means = mu) # shape is flattenend ( in theory)
-
-
-            y_q_slice = self.gaussian_conditional[stanh_level].quantize(y_slice, mode = "symbols", means = mu, perms = [perm,inv_perm]) #questo va codificato!!!
-            proper_shape = y_q_slice.shape
-
-            
-            y_strings.append(strings) 
-            y_cdfs.append(cdfs)
-            y_shapes.append(proper_shape)
-
-            y_q_slice = self.gaussian_conditional.dequantize(y_q_slice) 
-            y_hat_slice = y_q_slice + mu 
-
-                                                             
-            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-            lrp = self.lrp_transforms[slice_index](lrp_support)
-            lrp = 0.5 * torch.tanh(lrp)
-            y_hat_slice += lrp
-
-            y_hat_slices.append(y_hat_slice)
-
-            y_scales.append(scale)
-            y_means.append(mu)
-        
-        return {"strings": [ z_strings, y_strings], 
-                "cdfs": [ entropy_bottleneck_cdf, y_cdfs],
-                "shapes": [  z.size()[-2:], y_shapes], 
-                "params": {"means": y_means, "scales":y_scales}}
-
-
-
-
-    def decompress(self,data,stanh_level = 0):
-        strings = data["strings"] 
-        cdfs = data["cdfs"]
-        shapes = data["shapes"]
-        z_hat = self.entropy_bottleneck[stanh_level].decompress(strings[0],cdfs[0])
-
-        latent_scales = self.h_scale_s(z_hat)
-        latent_means = self.h_mean_s(z_hat)
-
-        y_shape = [z_hat.shape[2] * 4, z_hat.shape[3] * 4]
-
-        y_string = strings[1]
-        y_cdf = cdfs[1]
-
-        y_hat_slices = []
-
-        for slice_index in range(self.num_slices):
-            print("slice index: ",slice_index)
-            support_slices = (y_hat_slices if self.max_support_slices < 0 else y_hat_slices[:self.max_support_slices])
-
-            mean_support = torch.cat([latent_means] + support_slices, dim=1)
-            mu = self.cc_mean_transforms[slice_index](mean_support)
-            mu = mu[:, :, :y_shape[0], :y_shape[1]]
-
-            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-            scale = self.cc_scale_transforms[slice_index](scale_support)
-            scale = scale[:, :, :y_shape[0], :y_shape[1]]
-
-            #index = self.gaussian_conditional.build_indexes(scale)
-
-
-
-
-            rv = self.gaussian_conditional[stanh_level].decompress(y_string[slice_index],y_cdf[slice_index]) # decompress -> dequantize  + mu
-            rv = torch.Tensor(rv).reshape(1, -1, y_shape[0], y_shape[1]).to("cuda")
-
-            y_hat_slice = rv + mu
-
-            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-            lrp = self.lrp_transforms[slice_index](lrp_support)
-            lrp = 0.5 * torch.tanh(lrp)
-            y_hat_slice += lrp
-
-            y_hat_slices.append(y_hat_slice)
-        
-        y_hat = torch.cat(y_hat_slices, dim=1)
-        x_hat = self.g_s(y_hat).clamp_(0, 1)
-
-        return {"x_hat": x_hat}
-    
 
 
 

@@ -147,7 +147,7 @@ class TestKodakDataset(Dataset):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Example training script.")
 
-    parser.add_argument("-m","--model",default="3anchorsbis",help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-m","--model",default="4anchors",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-mp","--model_path",default="/scratch/inference/new_models/devil2022/",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-rp","--result_path",default="/scratch/inference/results",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-ip","--image_path",default="/scratch/dataset/kodak",help="Model architecture (default: %(default)s)",)
@@ -250,10 +250,10 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
         checkpoint = torch.load(pt, map_location=device)
 
 
-        factorized_configuration =checkpoint["factorized_configuration"]
-        factorized_configuration["trainable"] = True
-        gaussian_configuration =  checkpoint["gaussian_configuration"]
-        gaussian_configuration["trainable"] = True
+        factorized_configuration =[checkpoint["factorized_configuration"]]
+        factorized_configuration[0]["trainable"] = True
+        gaussian_configuration =  [checkpoint["gaussian_configuration"]]
+        gaussian_configuration[0]["trainable"] = True
         model =architecture(N = 192, 
                             M = 320, 
                             factorized_configuration = factorized_configuration, 
@@ -294,7 +294,7 @@ def load_models(dict_model_list,  models_path, device, image_models ,desired_bas
         state_dict_stanh["gaussian_configuration"] = checkpoint["gaussian_configuration"]
 
         
-        filename = "/scratch/inference/new_models/devil2022/3_anchors_stanh/stanh/" +  name.split("/")[-1].split("-")[0] + "-stanh.pth.tar"
+        filename = "/scratch/inference/new_models/devil2022/3_anchors_stanh/" +  name.split("/")[-1].split("-")[0] + "-stanh.pth.tar"
 
         torch.save(state_dict_stanh, filename)
 
@@ -627,7 +627,7 @@ def main(argv):
     models_path = join(args.model_path,model_name) # percorso completo per arrivare ai modelli salvati (/scratch/inference/pretrained_models/chegn2020) qua ho salvato i modelli 
  
 
-    models_checkpoint =[models_path + "anchors/a2-zou22.pth.tar",models_path + "/q4-zou22.pth.tar",models_path + "/q3-zou22.pth.tar"]# listdir(models_path) # checkpoints dei modelli  q1-bmshj2018-sos.pth.tar, q2-....
+    models_checkpoint =[models_path + "/q5-zou22.pth.tar",models_path + "/q6-zou22.pth.tar",models_path + "/q4-zou22.pth.tar"]# listdir(models_path) # checkpoints dei modelli  q1-bmshj2018-sos.pth.tar, q2-....
     print(models_checkpoint)
     device = "cuda"
     entropy_estimation = args.entropy_estimation
@@ -663,8 +663,8 @@ def main(argv):
 
     # now for every model I have the results, I have only to extract them and write to a file .txt
 
-    save_txt_path = os.path.join("/scratch/inference/results/RD_curve_files/zou22/",args.dat)
-    export_and_save_results(metrics,save_txt_path, dataset = args.dat)    
+    #save_txt_path = os.path.join("/scratch/inference/results/RD_curve_files/zou22/",args.dat)
+    #export_and_save_results(metrics,save_txt_path, dataset = args.dat)    
 
 
 

@@ -10,7 +10,7 @@ class RateDistortionLoss(nn.Module):
         super().__init__()
 
 
-        if metric is "mse":
+        if metric == "mse":
             self.dist_metric = nn.MSELoss()
         else:
             self.dist_metric = ms_ssim 

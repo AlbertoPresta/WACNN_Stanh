@@ -1,4 +1,4 @@
-FROM eidos-service.di.unito.it/eidos-base-pytorch:1.10.0
+FROM gitlab.di.unito.it:5000/presta/resdsic
 
 
 RUN pip install compressai 

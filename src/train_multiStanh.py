@@ -503,7 +503,7 @@ def parse_args(argv):
     parser.add_argument("-mp","--model_path",default="/scratch/inference/new_models/devil2022/",help="Model architecture (default: %(default)s)",)
     
     
-    parser.add_argument("--lmbda", nargs='+', type=float, default =[0.0009, 0.0035,0.0067,0.025, 0.0820,0.15])
+    parser.add_argument("--lmbda", nargs='+', type=float, default =[0.025])
     
     parser.add_argument("-lr","--learning-rate",default=1e-4,type=float,help="Learning rate (default: %(default)s)",)
 
@@ -511,13 +511,14 @@ def parse_args(argv):
     parser.add_argument("-ni","--num_images",default = 48064, type = int)
     parser.add_argument("-niv","--num_images_val",default = 1024, type = int)
 
-    parser.add_argument("-sp","--stanh_path",default="/scratch/inference/new_models/devil2022/3_anchors_stanh",help="Model architecture (default: %(default)s)",)
+    parser.add_argument("-sp","--stanh_path",default="/scratch/inference/new_models/devil2022/3_anchors_stanh",help="Model architecture (default: %(default)s)",)#dddd
     parser.add_argument("-rp","--result_path",default="/scratch/inference/results",help="Model architecture (default: %(default)s)",)
     parser.add_argument("-ip","--image_path",default="/scratch/dataset/kodak",help="Model architecture (default: %(default)s)",)
     parser.add_argument("--entropy_estimation", action="store_true", help="Use cuda")
     parser.add_argument("--clip_max_norm",default=1.0,type=float,help="gradient clipping max norm (default: %(default)s",)
     parser.add_argument("--pretrained_stanh", action="store_true", help="Use cuda")
     parser.add_argument("--only_dist", action="store_true", help="Use cuda")
+    parser.add_argument("--unfreeze_fact", action="store_true", help="Use cuda")
     parser.add_argument("--patch-size",type=int,nargs=2,default=(256, 256),help="Size of the patches to be cropped (default: %(default)s)",)
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: %(default)s)")
     parser.add_argument("-n","--num-workers",type=int,default=8,help="Dataloaders threads (default: %(default)s)",)
@@ -526,11 +527,11 @@ def parse_args(argv):
     parser.add_argument("-e","--epochs",default=600,type=int,help="Number of epochs (default: %(default)s)",)
     parser.add_argument("--fact_gp",default=15,type=int,help="factorized_beta",)
     parser.add_argument("--gauss_gp",default=15,type=int,help="gauss_beta",)
-    parser.add_argument("--gauss_tr",default=True,type=bool,help="gauss_tr",)
+
     parser.add_argument("--fact_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     parser.add_argument("--gauss_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     
-    parser.add_argument("--num_stanh", type=int, default=6, help="Batch size (default: %(default)s)")
+    parser.add_argument("--num_stanh", type=int, default=1, help="Batch size (default: %(default)s)")
     parser.add_argument("--training_focus",default="stanh_levels",type=str,help="factorized_annealing",)
 
     args = parser.parse_args(argv) ###s
@@ -762,14 +763,19 @@ def main(argv):
     models_path = join(args.model_path,model_name) # percorso completo per arrivare ai modelli salvati (/scratch/inference/pretrained_models/chegn2020) qua ho salvato i modelli 
     device = "cuda"
 
-    model_checkpoint = models_path + "/anchors/q5-zou22.pth.tar" # this is the 
+    model_checkpoint = models_path + "/derivations/q4-a2-zou22.pth.tar"#a1-zou22.pth.tar" # this is the 
     checkpoint = torch.load(model_checkpoint, map_location=device)
 
-    checkpoint["state_dict"]["gaussian_conditional._cdf_length"] = checkpoint["state_dict"]["gaussian_conditional._cdf_length"].ravel()
-    factorized_configuration =checkpoint["factorized_configuration"]
-    factorized_configuration["trainable"] = True
-    gaussian_configuration =  checkpoint["gaussian_configuration"]#sssss
-    gaussian_configuration["trainable"] = True #ddd
+    checkpoint["state_dict"]["gaussian_conditional._cdf_length"] = checkpoint["state_dict"]["gaussian_conditional._cdf_length"].ravel() #ffff
+
+
+
+    factorized_configuration =checkpoint["factorized_configuration"]    
+    gaussian_configuration =  checkpoint["gaussian_configuration"]#sssssdddd
+
+
+
+    print("gaussian configuration: ",gaussian_configuration)
 
 
     factorized_configuration["beta"] = 10
@@ -784,7 +790,10 @@ def main(argv):
     gaussian_configuration["annealing"] = args.gauss_annealing
     gaussian_configuration["gap_factor"] = args.gauss_gp
 
-    
+
+
+
+
     if args.pretrained_stanh:
         print("entro qua!!!!")
         stanh_checkpoints_p = [args.stanh_path + "/anchors/a2-stanh.pth.tar",args.stanh_path + "/derivations/q4-a2-stanh.pth.tar",
@@ -796,10 +805,11 @@ def main(argv):
         stanh_checkpoints = []
 
         for p in stanh_checkpoints_p:
-            stanh_checkpoints.append(torch.load(p, map_location=device))
+            stanh_checkpoints.append(torch.load(p, map_location=device)) #ddd
 
     else:
-        stanh_checkpoints_p = args.stanh_path + "/anchors/a2-stanh.pth.tar"
+        print("dovrebbe essere corretto, perché")
+        stanh_checkpoints_p = args.stanh_path + "/anchors/a2-stanh.pth.tar"#a3-stanh.pth.tar" #q6-stanh.pth.tar"#a1-stanh.pth.tar"
         stanh_checkpoints = []
 
         for _ in range(args.num_stanh):
@@ -810,13 +820,20 @@ def main(argv):
     #define model 
     architecture =  models["cnn_multi"]
 
+    factorized_configurations, gaussian_configurations = [],[]
+    for jj in range(args.num_stanh) :
+
+        factorized_configurations.append(factorized_configuration)
+        gaussian_configurations.append(gaussian_configuration)
+        print("DONE")
 
     
     model =architecture(N = 192, 
                             M = 320, 
                             num_stanh = args.num_stanh,
-                            factorized_configuration = factorized_configuration, 
-                            gaussian_configuration = gaussian_configuration)
+                            factorized_configuration = factorized_configurations, 
+                            gaussian_configuration = gaussian_configurations #dddd
+                           )
             
 
     model = model.to(device)
@@ -839,7 +856,7 @@ def main(argv):
     if args.training_focus == "tune_gs":
         model.unfreeze_decoder()
     elif args.training_focus == "stanh_levels":
-        model.unfreeze_quantizer()
+        model.unfreeze_quantizer(args.unfreeze_fact)
     elif args.training_focus == "all":
         model.unfreeze_all()
     else:

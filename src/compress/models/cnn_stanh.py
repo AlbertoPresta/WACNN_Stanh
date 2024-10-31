@@ -33,6 +33,7 @@ class WACNNSoS(CompressionModel):
                   factorized_configuration = None, 
                   gaussian_configuration = None,
                   pretrained_model = None,
+                  multi = False,
                  **kwargs):
         super().__init__(**kwargs)
 
@@ -150,25 +151,25 @@ class WACNNSoS(CompressionModel):
 
 
 
+        if multi is False:
+            self.entropy_bottleneck = EntropyBottleneckSoS(N, 
+                                                beta = self.factorized_configuration[0]["beta"], 
+                                                    num_sigmoids = self.factorized_configuration[0]["num_sigmoids"], 
+                                                    activation = self.factorized_configuration[0]["activation"],
+                                                    extrema = self.factorized_configuration[0]["extrema"],
+                                                    trainable = self.factorized_configuration[0]["trainable"],
+                                                    device = torch.device("cuda") 
+                                                    )   
 
-        self.entropy_bottleneck = EntropyBottleneckSoS(N, 
-                                               beta = self.factorized_configuration[0]["beta"], 
-                                                num_sigmoids = self.factorized_configuration[0]["num_sigmoids"], 
-                                                activation = self.factorized_configuration[0]["activation"],
-                                                extrema = self.factorized_configuration[0]["extrema"],
-                                                trainable = self.factorized_configuration[0]["trainable"],
-                                                device = torch.device("cuda") 
-                                                )   
-
-        self.gaussian_conditional = GaussianConditionalSoS(None,
-                                                            channels = N,
-                                                            beta = self.gaussian_configuration[0]["beta"], 
-                                                            num_sigmoids = self.gaussian_configuration[0]["num_sigmoids"], 
-                                                            activation = self.gaussian_configuration[0]["activation"],
-                                                            extrema = self.gaussian_configuration[0]["extrema"], 
-                                                            trainable =  self.gaussian_configuration[0]["trainable"],
-                                                            device = torch.device("cuda")
-                                                            )
+            self.gaussian_conditional = GaussianConditionalSoS(None,
+                                                                channels = N,
+                                                                beta = self.gaussian_configuration[0]["beta"], 
+                                                                num_sigmoids = self.gaussian_configuration[0]["num_sigmoids"], 
+                                                                activation = self.gaussian_configuration[0]["activation"],
+                                                                extrema = self.gaussian_configuration[0]["extrema"], 
+                                                                trainable =  self.gaussian_configuration[0]["trainable"],
+                                                                device = torch.device("cuda")
+                                                                )
 
 
         if  pretrained_model is not None:

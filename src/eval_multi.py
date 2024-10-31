@@ -2,14 +2,14 @@
 import torch 
 import os 
 import numpy as np 
-from pathlib import Path
-import random
+
 from compress.utils.help_function import compute_msssim, compute_psnr
 from torchvision import transforms
 from PIL import Image
 import torch
-import time
-from compress.datasets import ImageFolder
+
+
+from compress.models.cnn_multiStanh import WACNNMultiSos
 import torch.nn.functional as F
 import math
 from compressai.ops import compute_padding
@@ -18,18 +18,14 @@ from pytorch_msssim import ms_ssim
 import matplotlib.pyplot as plt
 import numpy as np
 import sys
-import torch.optim as optim
 import argparse
 from compressai.zoo import *
-from torch.utils.data import DataLoader
 from os.path import join 
-from compress.zoo import models, aux_net_models
 import wandb
-from torch.utils.data import Dataset
 from os import listdir
 from collections import OrderedDict
 from compress.utils.annealings import *
-
+from compress.zoo import *
 torch.backends.cudnn.benchmark = True #sss
 
 
@@ -37,13 +33,93 @@ torch.backends.cudnn.benchmark = True #sss
 import torch.nn as nn
 from pytorch_msssim import ms_ssim 
 
-from datetime import datetime
+
 from os.path import join 
 import wandb
-import shutil
 import seaborn as sns
 palette = sns.color_palette("tab10")
 import matplotlib.pyplot as plt
+
+
+
+
+
+
+import numpy as np
+import scipy.interpolate
+
+
+def BD_PSNR(R1, PSNR1, R2, PSNR2, piecewise=0):
+    lR1 = np.log(R1)
+    lR2 = np.log(R2)
+
+    p1 = np.polyfit(lR1, PSNR1, 3)
+    p2 = np.polyfit(lR2, PSNR2, 3)
+
+    # integration interval
+    min_int = max(min(lR1), min(lR2))
+    max_int = min(max(lR1), max(lR2))
+
+    # find integral
+    if piecewise == 0:
+        p_int1 = np.polyint(p1)
+        p_int2 = np.polyint(p2)
+
+        int1 = np.polyval(p_int1, max_int) - np.polyval(p_int1, min_int)
+        int2 = np.polyval(p_int2, max_int) - np.polyval(p_int2, min_int)
+    else:
+        # See https://chromium.googlesource.com/webm/contributor-guide/+/master/scripts/visual_metrics.py
+        lin = np.linspace(min_int, max_int, num=100, retstep=True)
+        interval = lin[1]
+        samples = lin[0]
+        v1 = scipy.interpolate.pchip_interpolate(np.sort(lR1), np.sort(PSNR1), samples)
+        v2 = scipy.interpolate.pchip_interpolate(np.sort(lR2), np.sort(PSNR2), samples)
+        # Calculate the integral using the trapezoid method on the samples.
+        int1 = np.trapz(v1, dx=interval)
+        int2 = np.trapz(v2, dx=interval)
+
+    # find avg diff
+    avg_diff = (int2-int1)/(max_int-min_int)
+
+    return avg_diff
+
+
+def BD_RATE(R1, PSNR1, R2, PSNR2, piecewise=0):
+    lR1 = np.log(R1)
+    lR2 = np.log(R2)
+
+    # rate method
+    p1 = np.polyfit(PSNR1, lR1, 3)
+    p2 = np.polyfit(PSNR2, lR2, 3)
+
+    # integration interval
+    min_int = max(min(PSNR1), min(PSNR2))
+    max_int = min(max(PSNR1), max(PSNR2))
+
+    # find integral
+    if piecewise == 0:
+        p_int1 = np.polyint(p1)
+        p_int2 = np.polyint(p2)
+
+        int1 = np.polyval(p_int1, max_int) - np.polyval(p_int1, min_int)
+        int2 = np.polyval(p_int2, max_int) - np.polyval(p_int2, min_int)
+    else:
+        lin = np.linspace(min_int, max_int, num=100, retstep=True)
+        interval = lin[1]
+        samples = lin[0]
+        v1 = scipy.interpolate.pchip_interpolate(np.sort(PSNR1), np.sort(lR1), samples)
+        v2 = scipy.interpolate.pchip_interpolate(np.sort(PSNR2), np.sort(lR2), samples)
+        # Calculate the integral using the trapezoid method on the samples.
+        int1 = np.trapz(v1, dx=interval)
+        int2 = np.trapz(v2, dx=interval)
+
+    # find avg diff
+    avg_exp_diff = (int2-int1)/(max_int-min_int)
+    avg_diff = (np.exp(avg_exp_diff)-1)*100
+    return avg_diff
+
+
+
 
 def plot_rate_distorsion(bpp_res, psnr_res,epoch, eest = "compression", index_list = [4]):
 
@@ -226,7 +302,7 @@ def parse_args(argv):
     parser.add_argument("--fact_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     parser.add_argument("--gauss_annealing",default="gap_stoc",type=str,help="factorized_annealing",)
     
-    parser.add_argument("--num_stanh", type=int, default=4, help="Batch size (default: %(default)s)")
+    parser.add_argument("--num_stanh", type=int, default=7, help="Batch size (default: %(default)s)")
     parser.add_argument("--training_focus",default="stanh_levels",type=str,help="factorized_annealing",)
 
     args = parser.parse_args(argv) ###s
@@ -459,7 +535,7 @@ def main(argv):
         #print("cc---------------------- ",cc["gaussian_configuration"])
         factorized_configuration = []
         gaussian_configuration = []
-        for jj in [0.5,1,1.5,0,2.5,3,3.5,4]:#range(args.num_stanh):
+        for jj in [1,1.5,0,2.5,3,3.5,4]:#range(args.num_stanh):
             d = torch.load(stanh_checkpoints_p, map_location=device) 
             d["gaussian_configuration"]["num_sigmoids"] = int(d["gaussian_configuration"]["extrema"]*jj)
             print("--------------------------------")
@@ -471,15 +547,8 @@ def main(argv):
             print("DONE")
 
 
-
-
-
-    #define model 
-    architecture =  models["cnn_multi"]
-
-
-    
-    model =architecture(N = 192, 
+   
+    model =WACNNMultiSos(N = 192, 
                             M = 320, 
                             num_stanh = args.num_stanh,
                             factorized_configuration = factorized_configuration, 
@@ -504,14 +573,14 @@ def main(argv):
 
 
     adding_levels = [0.0005,0.00075,0.001,0.0011,0.00115,0.0012,0.00125,0.0014]
-    start_levels = [0,1,2,3,4,5,6,7]
+    start_levels = [0,1,2,3,4,5,6]
     custom_levels = []#[0,0.001,0.002,0.003,0.004,0.005,0.006,0.007,0.008,0.009,0.010,0.1,1,1.001,1.1,2]
 
 
     for i in start_levels:
         custom_levels.append(i)
-        #for j in adding_levels:
-        #    custom_levels.append(i + j)
+        for j in adding_levels:
+            custom_levels.append(i + j)
     
     #custom_levels.append(2)
     
@@ -539,7 +608,12 @@ def main(argv):
     plot_rate_distorsion(bpp_res, psnr_res,0, eest="compression")
 
 
-if __name__ == "__main__":
+    print("Our-adapt")
+    print('BD-PSNR: ', BD_PSNR(bpp_res["manual"], psnr_res["manual"], bpp_res["proposed"],psnr_res["proposed"]))
+    print('BD-RATE: ', BD_RATE(bpp_res["manual"], psnr_res["manual"], bpp_res["proposed"], psnr_res["proposed"]))
 
-     
+
+
+
+if __name__ == "__main__":
     main(sys.argv[1:])

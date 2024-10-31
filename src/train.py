@@ -1,16 +1,3 @@
-# Copyright 2020 InterDigital Communications, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 import argparse
 import math
@@ -326,7 +313,7 @@ def main(argv):
 
 
 
-    criterion = RateDistortionLoss(lmbda=args.lmbda)
+    criterion = RateDistortionLoss(lmbda = args.lmbda)
     
 
     last_epoch = 0
@@ -373,6 +360,7 @@ def main(argv):
     print("******************************* DOPO")
     print(" trainable parameters: ",model_tr_parameters)
     print(" freeze parameters: ", model_fr_parameters)
+
 
 
     for epoch in range(last_epoch, args.epochs):
@@ -561,7 +549,7 @@ def main(argv):
         
 
 if __name__ == "__main__":
-    wandb.init(project="NeuralADQ_zou2022_A2_sections", entity="albertopresta")   
+    wandb.init(project="NeuralADQ_zou2022_A2_sections", entity="alberto-presta")   
     main(sys.argv[1:])
 
 

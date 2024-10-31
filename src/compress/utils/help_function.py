@@ -173,26 +173,24 @@ def configure_optimizers(net, args):
 
     params_dict = dict(net.named_parameters())
 
-    if args.baseline:
 
-        aux_parameters = {
+    aux_parameters = {
             n
             for n, p in net.named_parameters()
             if n.endswith(".quantiles") and p.requires_grad
         }
 
-        # Make sure we don't have an intersection of parameters
-        params_dict = dict(net.named_parameters())
-        inter_params = parameters & aux_parameters
-        union_params = parameters | aux_parameters
+    # Make sure we don't have an intersection of parameters
+    params_dict = dict(net.named_parameters())
+    inter_params = parameters & aux_parameters
+    union_params = parameters | aux_parameters
 
-        assert len(inter_params) == 0
-        assert len(union_params) - len(params_dict.keys()) == 0
+    assert len(inter_params) == 0
+    assert len(union_params) - len(params_dict.keys()) == 0
 
 
-        aux_optimizer = optim.Adam((params_dict[n] for n in sorted(aux_parameters)),lr=args.aux_learning_rate,)
-    else:
-        aux_optimizer = None
+    aux_optimizer = optim.Adam((params_dict[n] for n in sorted(aux_parameters)),lr=args.aux_learning_rate,)
+
 
     optimizer = optim.Adam(
         (params_dict[n] for n in sorted(parameters)),
